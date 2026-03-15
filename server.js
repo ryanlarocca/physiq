@@ -76,6 +76,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Get Gemini API key ─────────────────────────────────────────────────
+  if (req.method === 'GET' && pathname === '/api/gemini-key') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ key: GEMINI_API_KEY || '' }));
+    return;
+  }
+
   // ── AI parse-meal endpoint (text) ──────────────────────────────────────
   if (req.method === 'POST' && pathname === '/api/parse-meal') {
     try {

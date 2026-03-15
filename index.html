@@ -984,7 +984,7 @@ function showView(name, btn) {
 
   if (name === 'macros') { renderMacrosView(); }
   if (name === 'weight') { renderWeightView(); }
-  if (name === 'log')    { renderLogView(); }
+  if (name === 'log')    { renderLogView().catch(e => console.error('Error rendering log view:', e)); }
 }
 
 function updateNavIndicator(activeBtn) {
@@ -1401,7 +1401,27 @@ function toggleSettings() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const GEMINI_KEY_LS = 'mt_gemini_key';
-function getGeminiKey() { return localStorage.getItem(GEMINI_KEY_LS) || ''; }
+async function getGeminiKey() {
+  // Check localStorage first
+  let key = localStorage.getItem(GEMINI_KEY_LS) || '';
+  if (key) return key;
+  
+  // Try to fetch from server if empty
+  try {
+    const res = await fetch('/api/gemini-key');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.key) {
+        key = data.key;
+        // Cache it in localStorage for next time
+        localStorage.setItem(GEMINI_KEY_LS, key);
+      }
+    }
+  } catch(e) {
+    // Silently fail if server endpoint not available
+  }
+  return key;
+}
 function saveGeminiKey() {
   const val = document.getElementById('geminiKeyInput').value.trim();
   if (val) localStorage.setItem(GEMINI_KEY_LS, val);
@@ -1436,8 +1456,8 @@ async function aiLogMeal() {
       if (!res.ok) throw new Error(data.error || 'Server error');
       parsed = data;
     } catch(serverErr) {
-      // Fall back to direct Gemini API with stored key
-      const key = getGeminiKey();
+      // Fall back to direct Gemini API with stored/auto-loaded key
+      const key = await getGeminiKey();
       if (!key) throw new Error('No API key — add Gemini key in Settings or restart server');
       const prompt = `You are a macro logging assistant. Parse this food and return ONLY valid JSON, no markdown.
 Key protein references: chicken breast cooked=31g/100g 165cal, egg white=11g/100g 52cal, salmon=25g/100g, white rice cooked=2.7g/100g 130cal.
@@ -1512,8 +1532,8 @@ async function aiLogFromPhoto() {
       if (!res.ok) throw new Error(data.error || 'Server error');
       parsed = data;
     } catch(serverErr) {
-      // Fall back to direct Gemini API with stored key
-      const key = getGeminiKey();
+      // Fall back to direct Gemini API with stored/auto-loaded key
+      const key = await getGeminiKey();
       if (!key) throw new Error('No API key — add Gemini key in Settings or restart server');
       const captionNote = caption ? `The user says: "${caption}". Trust this description — image is supplementary.` : 'Use visual analysis to identify the food.';
       const prompt = `Analyze this food image and return macros. ${captionNote}
@@ -1838,7 +1858,7 @@ function exportWeightCSV() {
 // LOG VIEW — Setup
 // ═══════════════════════════════════════════════════════════════════════════
 
-function renderLogView() {
+async function renderLogView() {
   // Render today's meal list
   const today = todayStr();
   const logs = getLogs();
@@ -1850,7 +1870,7 @@ function renderLogView() {
   document.getElementById('goalProtein').value = t.protein;
   document.getElementById('goalCarbs').value   = t.carbs;
   document.getElementById('goalFat').value     = t.fat;
-  const k = getGeminiKey();
+  const k = await getGeminiKey();
   if (k) document.getElementById('geminiKeyInput').value = k;
   // Sync date pickers
   document.getElementById('wInputDate').value = todayStr();
@@ -1903,7 +1923,7 @@ document.getElementById('wInputDate').value  = todayStr();
 // Initial render
 syncFromGithub();
 renderMacrosView();
-renderLogView();
+renderLogView().catch(e => console.error('Error initializing log view:', e));
 
 // Initialize nav indicator position
 setTimeout(() => {
