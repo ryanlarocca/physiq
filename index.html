@@ -670,10 +670,6 @@
       <canvas id="todayChart"></canvas>
     </div>
 
-    <!-- Meal log for today -->
-    <div class="section-title">Today's Log</div>
-    <div class="meal-list" id="mealList"></div>
-
     <!-- History sub-section -->
     <div class="section-title" style="margin-top:24px">Calorie History</div>
     <div class="range-tabs" id="rangeTabs">
@@ -767,29 +763,6 @@
       </div>
     </div>
 
-    <!-- Log weight input -->
-    <div class="card">
-      <h2>Log Weight</h2>
-      <div class="input-row">
-        <div class="field">
-          <label>Date</label>
-          <input type="date" id="wInputDate">
-        </div>
-        <div class="field">
-          <label>Weight (lbs)</label>
-          <input type="number" id="wInputWeight" placeholder="180.0" step="0.1" min="50" max="500">
-        </div>
-        <button class="btn" onclick="logWeight()">Log</button>
-      </div>
-      <div class="goal-row">
-        <div class="field">
-          <label>Goal Weight (lbs)</label>
-          <input type="number" id="wInputGoal" placeholder="e.g. 175" step="0.5" min="50" max="500">
-        </div>
-        <button class="btn" onclick="setWeightGoal()">Set Goal</button>
-      </div>
-    </div>
-
     <!-- Weight history list -->
     <div class="history-card">
       <div class="history-header">
@@ -806,8 +779,23 @@
   ══════════════════════════════════════════════════════════════ -->
   <div class="view" id="view-log">
 
+    <!-- Today's food items (moved from Macros tab) -->
+    <div class="section-title" style="margin-top:4px">Today's Foods</div>
+    <div class="meal-list" id="mealList"></div>
+
+    <!-- Quick add -->
+    <div class="section-title">Quick Add</div>
+    <div class="favorites-grid">
+      <button class="fav-btn" onclick="addFavorite(0)">🥣 Oatmeal + Egg Whites</button>
+      <button class="fav-btn" onclick="addFavorite(1)">🍗 Chicken + Rice</button>
+      <button class="fav-btn" onclick="addFavorite(2)">🍌 Banana</button>
+      <button class="fav-btn" onclick="addFavorite(3)">🍎 Apple</button>
+      <button class="fav-btn" onclick="addFavorite(4)">🍇 Grapes</button>
+      <button class="fav-btn" onclick="addFavorite(5)">🍓 Strawberries</button>
+    </div>
+
     <!-- AI text log -->
-    <div class="section-title" style="margin-top:4px">Log a Meal (AI)</div>
+    <div class="section-title">Log with AI</div>
     <div class="ai-search-wrap">
       <div class="ai-search-row">
         <input type="text" id="aiSearchInput" placeholder="e.g. 2 eggs + toast, 400g chicken breast" autocomplete="off" onkeydown="if(event.key==='Enter') aiLogMeal()">
@@ -829,17 +817,6 @@
         </div>
       </div>
       <div class="ai-status" id="aiStatus"></div>
-    </div>
-
-    <!-- Quick add -->
-    <div class="section-title">Quick Add</div>
-    <div class="favorites-grid">
-      <button class="fav-btn" onclick="addFavorite(0)">🥣 Oatmeal + Egg Whites</button>
-      <button class="fav-btn" onclick="addFavorite(1)">🍗 Chicken + Rice</button>
-      <button class="fav-btn" onclick="addFavorite(2)">🍌 Banana</button>
-      <button class="fav-btn" onclick="addFavorite(3)">🍎 Apple</button>
-      <button class="fav-btn" onclick="addFavorite(4)">🍇 Grapes</button>
-      <button class="fav-btn" onclick="addFavorite(5)">🍓 Strawberries</button>
     </div>
 
     <!-- Manual entry (collapsed) -->
@@ -869,19 +846,26 @@
       </div>
     </div>
 
-    <!-- Log weight shortcut -->
+    <!-- Log weight (moved from Weight tab) -->
     <div class="section-title">Log Weight</div>
-    <div class="card" style="margin-bottom:0">
+    <div class="card">
       <div class="input-row">
         <div class="field">
           <label>Date</label>
-          <input type="date" id="wInputDate2">
+          <input type="date" id="wInputDate">
         </div>
         <div class="field">
           <label>Weight (lbs)</label>
-          <input type="number" id="wInputWeight2" placeholder="180.0" step="0.1" min="50" max="500">
+          <input type="number" id="wInputWeight" placeholder="180.0" step="0.1" min="50" max="500">
         </div>
-        <button class="btn" onclick="logWeightFromLog()">Log</button>
+        <button class="btn" onclick="logWeight()">Log</button>
+      </div>
+      <div class="goal-row">
+        <div class="field">
+          <label>Goal Weight (lbs)</label>
+          <input type="number" id="wInputGoal" placeholder="e.g. 175" step="0.5" min="50" max="500">
+        </div>
+        <button class="btn" onclick="setWeightGoal()">Set Goal</button>
       </div>
     </div>
 
@@ -1070,6 +1054,31 @@ function nowTime12() {
   return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')} ${ampm}`;
 }
 
+function renderTodayMealList(todayLogs) {
+  const allLogs = getLogs();
+  const list = document.getElementById('mealList');
+  if (!todayLogs.length) {
+    list.innerHTML = '<div class="empty-state">No meals logged today yet. Tap ➕ to add one.</div>';
+  } else {
+    list.innerHTML = todayLogs.map(meal => {
+      const idx = allLogs.findIndex(l => l.date===meal.date && l.time===meal.time && l.description===meal.description);
+      return `<div class="meal-item">
+        <div class="meal-info">
+          <div class="meal-name">${meal.description}</div>
+          <div class="meal-macros">
+            <span class="meal-macro">🔥 <span>${meal.calories}</span></span>
+            <span class="meal-macro">💪 <span>${meal.protein}g</span></span>
+            <span class="meal-macro">🍞 <span>${meal.carbs}g</span></span>
+            <span class="meal-macro">🥑 <span>${meal.fat}g</span></span>
+          </div>
+        </div>
+        <div class="meal-time">${meal.time}</div>
+        <button class="delete-btn" onclick="deleteMeal(${idx})">×</button>
+      </div>`;
+    }).join('');
+  }
+}
+
 function renderMacrosView() {
   const today = todayStr();
   const logs    = getLogs();
@@ -1152,29 +1161,7 @@ function renderMacrosView() {
   }
 
   // Meal list
-  const allLogs = getLogs();
-  const list = document.getElementById('mealList');
-  if (!todayLogs.length) {
-    list.innerHTML = '<div class="empty-state">No meals logged today yet. Tap ➕ to add one.</div>';
-  } else {
-    list.innerHTML = todayLogs.map(meal => {
-      const idx = allLogs.findIndex(l => l.date===meal.date && l.time===meal.time && l.description===meal.description);
-      return `<div class="meal-item">
-        <div class="meal-info">
-          <div class="meal-name">${meal.description}</div>
-          <div class="meal-macros">
-            <span class="meal-macro">🔥 <span>${meal.calories}</span></span>
-            <span class="meal-macro">💪 <span>${meal.protein}g</span></span>
-            <span class="meal-macro">🍞 <span>${meal.carbs}g</span></span>
-            <span class="meal-macro">🥑 <span>${meal.fat}g</span></span>
-          </div>
-        </div>
-        <div class="meal-time">${meal.time}</div>
-        <button class="delete-btn" onclick="deleteMeal(${idx})">×</button>
-      </div>`;
-    }).join('');
-  }
-
+  renderTodayMealList(todayLogs);
   renderMacroHistory();
 }
 
@@ -1735,23 +1722,6 @@ function logWeight() {
   showToast('✓ Logged ' + weightVal.toFixed(1) + ' lbs');
 }
 
-function logWeightFromLog() {
-  const dateVal   = document.getElementById('wInputDate2').value;
-  const weightVal = parseFloat(document.getElementById('wInputWeight2').value);
-  if (!dateVal || isNaN(weightVal) || weightVal < 50 || weightVal > 500) {
-    showToast('Enter a valid weight!', '#ff6b6b'); return;
-  }
-  let entries = getEntries();
-  const existing = entries.findIndex(e => e.date === dateVal);
-  if (existing >= 0) entries[existing].weight = weightVal;
-  else entries.push({ date:dateVal, weight:weightVal });
-  entries.sort((a,b) => a.date.localeCompare(b.date));
-  saveEntries(entries);
-  fetch('/data.json', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(entries) }).catch(()=>{});
-  document.getElementById('wInputWeight2').value = '';
-  showToast('✓ Logged ' + weightVal.toFixed(1) + ' lbs');
-}
-
 function setWeightGoal() {
   const g = parseFloat(document.getElementById('wInputGoal').value);
   if (isNaN(g) || g < 50 || g > 500) { showToast('Enter a valid goal weight!', '#ff6b6b'); return; }
@@ -1785,6 +1755,12 @@ function exportWeightCSV() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderLogView() {
+  // Render today's meal list
+  const today = todayStr();
+  const logs = getLogs();
+  const todayLogs = logs.filter(l => l.date === today).sort((a,b) => b.time.localeCompare(a.time));
+  renderTodayMealList(todayLogs);
+  
   const t = getTargets();
   document.getElementById('goalCal').value     = t.calories;
   document.getElementById('goalProtein').value = t.protein;
@@ -1793,7 +1769,7 @@ function renderLogView() {
   const k = getGeminiKey();
   if (k) document.getElementById('geminiKeyInput').value = k;
   // Sync date pickers
-  document.getElementById('wInputDate2').value = todayStr();
+  document.getElementById('wInputDate').value = todayStr();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1830,7 +1806,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!active) return;
     if ((active.id === 'wInputWeight' || active.id === 'wInputDate') && e.key === 'Enter') logWeight();
     if (active.id === 'wInputGoal' && e.key === 'Enter') setWeightGoal();
-    if ((active.id === 'wInputWeight2' || active.id === 'wInputDate2') && e.key === 'Enter') logWeightFromLog();
   });
 });
 
@@ -1840,7 +1815,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Set today on weight date pickers
 document.getElementById('wInputDate').value  = todayStr();
-document.getElementById('wInputDate2').value = todayStr();
 
 // Initial render
 syncFromGithub();
