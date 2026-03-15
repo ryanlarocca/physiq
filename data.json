@@ -2,15 +2,6 @@
   "macros": [
     {
       "date": "2026-03-08",
-      "time": "12:12 PM",
-      "description": "Quaker oats oatmeal with honey and egg whites",
-      "calories": 370,
-      "protein": 27,
-      "carbs": 45,
-      "fat": 3
-    },
-    {
-      "date": "2026-03-08",
       "time": "03:01 PM",
       "description": "Grapes (red/green seedless), 1/2 serving",
       "calories": 47,
@@ -46,31 +37,13 @@
       "fat": 11
     },
     {
-      "date": "2026-03-09",
-      "time": "09:51 AM",
-      "description": "Krispy Kreme glazed doughnut",
-      "calories": 190,
-      "protein": 2,
-      "carbs": 21,
-      "fat": 11
-    },
-    {
-      "date": "2026-03-09",
-      "time": "09:55 AM",
-      "description": "Egg whites (240g) + Quaker oats (1 serving) + honey (1 serving)",
-      "calories": 410,
-      "protein": 28,
-      "carbs": 56,
-      "fat": 2
-    },
-    {
-      "date": "2026-03-09",
-      "time": "11:09 AM",
-      "description": "1 medium banana + 5 oz blueberries",
-      "calories": 195,
-      "protein": 2.5,
-      "carbs": 48,
-      "fat": 0.5
+      "date": "2026-03-08",
+      "time": "12:12 PM",
+      "description": "Quaker oats oatmeal with honey and egg whites",
+      "calories": 370,
+      "protein": 27,
+      "carbs": 45,
+      "fat": 3
     },
     {
       "date": "2026-03-09",
@@ -100,6 +73,42 @@
       "fat": 0.3
     },
     {
+      "date": "2026-03-09",
+      "time": "09:51 AM",
+      "description": "Krispy Kreme glazed doughnut",
+      "calories": 190,
+      "protein": 2,
+      "carbs": 21,
+      "fat": 11
+    },
+    {
+      "date": "2026-03-09",
+      "time": "09:55 AM",
+      "description": "Egg whites (240g) + Quaker oats (1 serving) + honey (1 serving)",
+      "calories": 410,
+      "protein": 28,
+      "carbs": 56,
+      "fat": 2
+    },
+    {
+      "date": "2026-03-09",
+      "time": "11:09 AM",
+      "description": "1 medium banana + 5 oz blueberries",
+      "calories": 195,
+      "protein": 2.5,
+      "carbs": 48,
+      "fat": 0.5
+    },
+    {
+      "date": "2026-03-10",
+      "time": "11:59 PM",
+      "description": "Remaining meals - daily total restored from backup",
+      "calories": 2486.5,
+      "protein": 252,
+      "carbs": 261,
+      "fat": 46
+    },
+    {
       "date": "2026-03-10",
       "time": "12:54 PM",
       "description": "Knudsen Cottage Cheese",
@@ -107,6 +116,42 @@
       "protein": 16,
       "carbs": 11,
       "fat": 8
+    },
+    {
+      "date": "2026-03-11",
+      "time": "11:59 PM",
+      "description": "Daily total restored from backup",
+      "calories": 2174,
+      "protein": 228,
+      "carbs": 228,
+      "fat": 43
+    },
+    {
+      "date": "2026-03-12",
+      "time": "11:59 PM",
+      "description": "Daily total restored from backup",
+      "calories": 2395,
+      "protein": 236,
+      "carbs": 234,
+      "fat": 56
+    },
+    {
+      "date": "2026-03-13",
+      "time": "11:59 PM",
+      "description": "Daily total restored from backup",
+      "calories": 1966,
+      "protein": 207,
+      "carbs": 205,
+      "fat": 37
+    },
+    {
+      "date": "2026-03-14",
+      "time": "11:59 PM",
+      "description": "Daily total restored from backup",
+      "calories": 2093,
+      "protein": 196,
+      "carbs": 243,
+      "fat": 38
     }
   ],
   "weights": [

@@ -34,7 +34,7 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: true }));
 
         // Trigger async Google Sheets sync (non-blocking)
-        const syncScript = path.join(process.cwd(), 'sync-weights.sh');
+        const syncScript = path.join(process.cwd(), 'sync-physiq.sh');
         const child = spawn('/bin/bash', [syncScript], {
           detached: true,
           stdio: 'ignore',
@@ -42,7 +42,7 @@ const server = http.createServer(async (req, res) => {
           env: { ...process.env, GOG_ACCOUNT: 'info@lrghomes.com', PATH: process.env.PATH || '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' }
         });
         child.unref();
-        console.log('[sync] Triggered weight sync to Google Sheets');
+        console.log('[sync] Triggered Physiq sync (macros + weights) to Google Sheets');
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
