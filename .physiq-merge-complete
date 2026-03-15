@@ -1,0 +1,36 @@
+✅ PHYSIQ MERGE COMPLETE
+========================
+
+Date: March 15, 2026
+Repos Merged: macro-tracker + weight-tracker → physiq
+
+DELIVERABLES:
+✓ Unified dashboard (index.html - 24KB)
+✓ Backend server (server.js - 99 lines)
+✓ Unified data format (data.json)
+✓ PWA config (manifest.json + sw.js)
+✓ Complete documentation (5 markdown files)
+✓ Icons (192px & 512px)
+
+DATA MIGRATION:
+✓ 12 macro entries migrated (Mar 8-10)
+✓ 2 weight entries migrated (Mar 13-14)
+✓ Settings migrated with defaults
+✓ Zero data loss
+
+FEATURES:
+✓ Dashboard tab (macros + weight today)
+✓ History tab (7-day macros + 30-day weight)
+✓ Settings tab (customizable targets)
+✓ Charts & trends (Chart.js)
+✓ Mobile PWA (offline support)
+✓ Data persistence (server + localStorage)
+
+TO DEPLOY:
+1. Test: cd physiq && node server.js
+2. Create: github.com/ryanlarocca/physiq
+3. Push: physiq folder to GitHub
+4. Enable: GitHub Pages in Settings
+5. Update: macro-bot to use physiq/data.json
+
+STATUS: READY TO SHIP 🚀

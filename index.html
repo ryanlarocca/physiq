@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Physiq</title>
+  <meta name="description" content="Track macros, weight, and fitness in one unified dashboard">
+  <meta name="theme-color" content="#43e97b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Physiq">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --card: #1a1a24;
+      --card2: #22222f;
+      --accent: #6c63ff;
+      --accent2: #ff6584;
+      --green: #43e97b;
+      --red: #ff6b6b;
+      --yellow: #ffd166;
+      --text: #f0f0f5;
+      --muted: #8888aa;
+      --border: #2e2e42;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo { 
+      font-size: 1.3rem; 
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon { font-size: 1.5rem; }
+    .logo span { color: var(--green); }
+
+    .header-right {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .header-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 6px;
+      transition: color 0.2s;
+    }
+
+    .header-btn:hover { color: var(--green); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 16px 20px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 56px;
+      z-index: 99;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .tabs::-webkit-scrollbar { display: none; }
+
+    .tab {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tab:hover { border-color: var(--accent); }
+    .tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+      padding-bottom: calc(90px + env(safe-area-inset-bottom));
+    }
+
+    /* View sections */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* Today view */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      border: 1px solid var(--border);
+    }
+
+    .stat-card.wide { grid-column: 1 / -1; }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -1px;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--card2);
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    .progress-fill.warning { background: var(--yellow); }
+    .progress-fill.over { background: var(--red); }
+
+    /* History view */
+    .history-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .history-section h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--muted);
+    }
+
+    .history-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 12px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .history-date {
+      color: var(--green);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .history-value {
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .chart-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 200px;
+    }
+
+    /* Settings view */
+    .settings-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .form-group {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .form-group input {
+      width: 100%;
+      background: var(--card2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.1);
+    }
+
+    .btn {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn:hover { background: #5b53e3; }
+    .btn.danger { background: var(--red); }
+    .btn.danger:hover { background: #e55555; }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 10px 20px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+      z-index: 200;
+      gap: 0;
+    }
+
+    .nav-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 8px 0;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .nav-icon { font-size: 1.3rem; }
+    .nav-label { font-size: 0.7rem; }
+
+    .nav-btn.active {
+      color: var(--green);
+    }
+
+    .nav-btn.active .nav-icon {
+      transform: scale(1.15);
+    }
+
+    /* Utility */
+    .up { color: var(--red); }
+    .down { color: var(--green); }
+    .flat { color: var(--yellow); }
+    .text-center { text-align: center; }
+    .text-muted { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      .history-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="logo-icon">⚡</span>
+      <span>Physiq</span>
+    </div>
+    <div class="header-right">
+      <button class="header-btn" id="syncBtn" title="Sync">🔄</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-view="today">Dashboard</button>
+    <button class="tab" data-view="history">History</button>
+    <button class="tab" data-view="settings">⚙️ Settings</button>
+  </div>
+
+  <div class="container">
+    <!-- Dashboard View -->
+    <div class="view active" id="today">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Calories</div>
+          <div class="stat-value" id="todayCalories">0</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="caloriesFill"></div>
+          </div>
+          <div class="stat-sub" id="caloriesSub">0 / 2500</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Protein (g)</div>
+          <div class="stat-value" id="todayProtein">0</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="proteinFill"></div>
+          </div>
+          <div class="stat-sub" id="proteinSub">0 / 180g</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Carbs (g)</div>
+          <div class="stat-value" id="todayCarbs">0</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="carbsFill"></div>
+          </div>
+          <div class="stat-sub" id="carbsSub">0 / 250g</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Fat (g)</div>
+          <div class="stat-value" id="todayFat">0</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="fatFill"></div>
+          </div>
+          <div class="stat-sub" id="fatSub">0 / 80g</div>
+        </div>
+
+        <div class="stat-card wide">
+          <div class="stat-label">Current Weight</div>
+          <div class="stat-value" id="currentWeight">--</div>
+          <div class="stat-sub" id="weightTrend">No data</div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3>7-Day Calorie Trend</h3>
+        <div class="chart-wrap">
+          <canvas id="calorieChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- History View -->
+    <div class="view" id="history">
+      <div class="history-grid">
+        <div class="history-section">
+          <h3>📊 Macro History (7 Days)</h3>
+          <div id="macroHistory"></div>
+        </div>
+        <div class="history-section">
+          <h3>⚖️ Weight History</h3>
+          <div id="weightHistory"></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Weight Trend</h3>
+        <div class="chart-wrap">
+          <canvas id="weightChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div class="view" id="settings">
+      <div class="settings-form">
+        <div class="form-group">
+          <label for="calorieTarget">Daily Calorie Target</label>
+          <input type="number" id="calorieTarget" value="2500">
+        </div>
+        <div class="form-group">
+          <label for="proteinTarget">Daily Protein Target (g)</label>
+          <input type="number" id="proteinTarget" value="180">
+        </div>
+        <div class="form-group">
+          <label for="carbsTarget">Daily Carbs Target (g)</label>
+          <input type="number" id="carbsTarget" value="250">
+        </div>
+        <div class="form-group">
+          <label for="fatTarget">Daily Fat Target (g)</label>
+          <input type="number" id="fatTarget" value="80">
+        </div>
+
+        <button class="btn" id="saveSettings">Save Settings</button>
+        <button class="btn danger" id="clearData">Clear All Data</button>
+        <p class="text-center text-muted" style="font-size: 11px; margin-top: 16px;">
+          Last synced: <span id="syncTime">Never</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <nav>
+    <button class="nav-btn active" data-view="today">
+      <span class="nav-icon">📈</span>
+      <span class="nav-label">Dashboard</span>
+    </button>
+    <button class="nav-btn" data-view="history">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">History</span>
+    </button>
+    <button class="nav-btn" data-view="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <script>
+    // State management
+    let data = {
+      macros: [],
+      weights: [],
+      settings: {
+        calorieTarget: 2500,
+        proteinTarget: 180,
+        carbsTarget: 250,
+        fatTarget: 80
+      }
+    };
+
+    let calorieChart, weightChart;
+
+    // Load data from server or localStorage
+    async function loadData() {
+      try {
+        const response = await fetch('/data.json');
+        if (response.ok) {
+          const loaded = await response.json();
+          data.macros = loaded.macros || [];
+          data.weights = loaded.weights || [];
+          data.settings = { ...data.settings, ...(loaded.settings || {}) };
+        }
+      } catch (e) {
+        console.log('Using localStorage fallback');
+        const saved = localStorage.getItem('physiqData');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            data = { ...data, ...parsed };
+          } catch {}
+        }
+      }
+      updateUI();
+    }
+
+    // Save data to server and localStorage
+    async function saveData() {
+      localStorage.setItem('physiqData', JSON.stringify(data));
+      try {
+        await fetch('/data.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        document.getElementById('syncTime').textContent = new Date().toLocaleTimeString();
+      } catch (e) {
+        console.log('Server save failed, using localStorage');
+      }
+    }
+
+    // Get today's date as YYYY-MM-DD
+    function getToday() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    // Calculate today's macros
+    function getTodaysMacros() {
+      const today = getToday();
+      const todayMacros = data.macros.filter(m => m.date === today);
+      return {
+        calories: todayMacros.reduce((s, m) => s + (m.calories || 0), 0),
+        protein: todayMacros.reduce((s, m) => s + (m.protein || 0), 0),
+        carbs: todayMacros.reduce((s, m) => s + (m.carbs || 0), 0),
+        fat: todayMacros.reduce((s, m) => s + (m.fat || 0), 0)
+      };
+    }
+
+    // Get last 7 days of macros
+    function getLast7Days() {
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayMacros = data.macros.filter(m => m.date === dateStr);
+        const sum = {
+          date: dateStr,
+          calories: dayMacros.reduce((s, m) => s + (m.calories || 0), 0),
+          protein: dayMacros.reduce((s, m) => s + (m.protein || 0), 0),
+          carbs: dayMacros.reduce((s, m) => s + (m.carbs || 0), 0),
+          fat: dayMacros.reduce((s, m) => s + (m.fat || 0), 0)
+        };
+        days.push(sum);
+      }
+      return days;
+    }
+
+    // Update UI
+    function updateUI() {
+      updateSettings();
+      updateTodayView();
+      updateHistoryView();
+      updateCharts();
+    }
+
+    function updateSettings() {
+      document.getElementById('calorieTarget').value = data.settings.calorieTarget;
+      document.getElementById('proteinTarget').value = data.settings.proteinTarget;
+      document.getElementById('carbsTarget').value = data.settings.carbsTarget;
+      document.getElementById('fatTarget').value = data.settings.fatTarget;
+    }
+
+    function updateTodayView() {
+      const today = getTodaysMacros();
+      const settings = data.settings;
+
+      // Calories
+      document.getElementById('todayCalories').textContent = today.calories;
+      const calPct = Math.min(100, (today.calories / settings.calorieTarget) * 100);
+      const calFill = document.getElementById('caloriesFill');
+      calFill.style.width = calPct + '%';
+      calFill.className = 'progress-fill';
+      if (calPct > 100) calFill.classList.add('over');
+      else if (calPct > 90) calFill.classList.add('warning');
+      document.getElementById('caloriesSub').textContent = `${today.calories} / ${settings.calorieTarget}`;
+
+      // Protein
+      document.getElementById('todayProtein').textContent = today.protein.toFixed(0);
+      const protnPct = Math.min(100, (today.protein / settings.proteinTarget) * 100);
+      const protFill = document.getElementById('proteinFill');
+      protFill.style.width = protnPct + '%';
+      protFill.className = 'progress-fill';
+      if (protnPct > 100) protFill.classList.add('over');
+      else if (protnPct > 90) protFill.classList.add('warning');
+      document.getElementById('proteinSub').textContent = `${today.protein.toFixed(0)} / ${settings.proteinTarget}g`;
+
+      // Carbs
+      document.getElementById('todayCarbs').textContent = today.carbs.toFixed(0);
+      const carbsPct = Math.min(100, (today.carbs / settings.carbsTarget) * 100);
+      const carbsFill = document.getElementById('carbsFill');
+      carbsFill.style.width = carbsPct + '%';
+      carbsFill.className = 'progress-fill';
+      if (carbsPct > 100) carbsFill.classList.add('over');
+      else if (carbsPct > 90) carbsFill.classList.add('warning');
+      document.getElementById('carbsSub').textContent = `${today.carbs.toFixed(0)} / ${settings.carbsTarget}g`;
+
+      // Fat
+      document.getElementById('todayFat').textContent = today.fat.toFixed(0);
+      const fatPct = Math.min(100, (today.fat / settings.fatTarget) * 100);
+      const fatFill = document.getElementById('fatFill');
+      fatFill.style.width = fatPct + '%';
+      fatFill.className = 'progress-fill';
+      if (fatPct > 100) fatFill.classList.add('over');
+      else if (fatPct > 90) fatFill.classList.add('warning');
+      document.getElementById('fatSub').textContent = `${today.fat.toFixed(0)} / ${settings.fatTarget}g`;
+
+      // Weight
+      if (data.weights.length > 0) {
+        const latest = data.weights[data.weights.length - 1];
+        document.getElementById('currentWeight').textContent = latest.weight.toFixed(1) + ' lbs';
+        
+        if (data.weights.length > 1) {
+          const prev = data.weights[data.weights.length - 2];
+          const diff = latest.weight - prev.weight;
+          const trend = diff < -0.1 ? '📉' : diff > 0.1 ? '📈' : '➡️';
+          const trendClass = diff < -0.1 ? 'down' : diff > 0.1 ? 'up' : 'flat';
+          const trendText = (diff > 0 ? '+' : '') + diff.toFixed(1) + ' lbs';
+          document.getElementById('weightTrend').innerHTML = `<span class="${trendClass}">${trend} ${trendText}</span>`;
+        }
+      }
+    }
+
+    function updateHistoryView() {
+      const last7 = getLast7Days();
+      const last5Weights = data.weights.slice(-5);
+
+      // Macro history
+      const macroHtml = last7.map(day => `
+        <div class="history-card">
+          <div class="history-date">${new Date(day.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</div>
+          <div class="history-value">${day.calories} cal | ${day.protein.toFixed(0)}p ${day.carbs.toFixed(0)}c ${day.fat.toFixed(0)}f</div>
+        </div>
+      `).join('');
+      document.getElementById('macroHistory').innerHTML = macroHtml;
+
+      // Weight history
+      const weightHtml = last5Weights.map((w, i) => {
+        let trend = '';
+        if (i > 0) {
+          const diff = w.weight - last5Weights[i-1].weight;
+          trend = diff < -0.05 ? ' <span class="down">📉</span>' : diff > 0.05 ? ' <span class="up">📈</span>' : '';
+        }
+        return `
+          <div class="history-card">
+            <div class="history-date">${new Date(w.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</div>
+            <div class="history-value">${w.weight.toFixed(1)} lbs${trend}</div>
+          </div>
+        `;
+      }).reverse().join('');
+      document.getElementById('weightHistory').innerHTML = weightHtml;
+    }
+
+    function updateCharts() {
+      const last7 = getLast7Days();
+      const days = last7.map(d => new Date(d.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'}));
+      const calories = last7.map(d => d.calories);
+
+      // Calorie chart
+      const calorieCtx = document.getElementById('calorieChart').getContext('2d');
+      if (calorieChart) calorieChart.destroy();
+      calorieChart = new Chart(calorieCtx, {
+        type: 'line',
+        data: {
+          labels: days,
+          datasets: [{
+            label: 'Calories',
+            data: calories,
+            borderColor: '#43e97b',
+            backgroundColor: 'rgba(67, 233, 123, 0.1)',
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: '#43e97b',
+            pointBorderColor: '#0f0f13',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: '#2e2e42' },
+              ticks: { color: '#8888aa' }
+            },
+            x: { grid: { display: false }, ticks: { color: '#8888aa' } }
+          }
+        }
+      });
+
+      // Weight chart
+      const weights = data.weights.slice(-30);
+      const weightDays = weights.map(w => new Date(w.date).toLocaleDateString('en-US', {month: 'short', day: 'numeric'}));
+      const weightValues = weights.map(w => w.weight);
+
+      const weightCtx = document.getElementById('weightChart').getContext('2d');
+      if (weightChart) weightChart.destroy();
+      weightChart = new Chart(weightCtx, {
+        type: 'line',
+        data: {
+          labels: weightDays,
+          datasets: [{
+            label: 'Weight (lbs)',
+            data: weightValues,
+            borderColor: '#ff6584',
+            backgroundColor: 'rgba(255, 101, 132, 0.1)',
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: '#ff6584',
+            pointBorderColor: '#0f0f13',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: {
+              grid: { color: '#2e2e42' },
+              ticks: { color: '#8888aa' }
+            },
+            x: { grid: { display: false }, ticks: { color: '#8888aa' } }
+          }
+        }
+      });
+    }
+
+    // Tab navigation
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const view = e.currentTarget.dataset.view;
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(view).classList.add('active');
+        document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+      });
+    });
+
+    // Settings
+    document.getElementById('saveSettings').addEventListener('click', () => {
+      data.settings.calorieTarget = parseInt(document.getElementById('calorieTarget').value) || 2500;
+      data.settings.proteinTarget = parseInt(document.getElementById('proteinTarget').value) || 180;
+      data.settings.carbsTarget = parseInt(document.getElementById('carbsTarget').value) || 250;
+      data.settings.fatTarget = parseInt(document.getElementById('fatTarget').value) || 80;
+      saveData();
+      updateTodayView();
+      alert('Settings saved!');
+    });
+
+    document.getElementById('clearData').addEventListener('click', () => {
+      if (confirm('Are you sure? This will delete all macro and weight data.')) {
+        data.macros = [];
+        data.weights = [];
+        saveData();
+        updateUI();
+        alert('All data cleared');
+      }
+    });
+
+    document.getElementById('syncBtn').addEventListener('click', async () => {
+      await saveData();
+      alert('Synced!');
+    });
+
+    // Initialize
+    loadData();
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(e => console.log('SW failed:', e));
+    }
+  </script>
+</body>
+</html>
