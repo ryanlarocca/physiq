@@ -120,8 +120,11 @@ Food: "${text}"`;
   // ── AI parse-meal-photo endpoint (base64 image) ─────────────────────────
   if (req.method === 'POST' && pathname === '/api/parse-meal-photo') {
     try {
+      console.log('[parse-meal-photo] Request received');
       const bodyStr = await readBody(req);
+      console.log('[parse-meal-photo] Body received, length:', bodyStr.length);
       const { imageBase64, mimeType, caption } = JSON.parse(bodyStr);
+      console.log('[parse-meal-photo] Parsed body - imageBase64 length:', imageBase64?.length, 'mimeType:', mimeType, 'caption:', caption);
       if (!imageBase64) throw new Error('Missing imageBase64');
       if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured on server');
 
@@ -131,21 +134,25 @@ Food: "${text}"`;
       const prompt = `Analyze this food image and return macros. ${captionNote}
 Rules: nutrition label → read exactly; food photo → estimate USDA averages. Return ONLY valid JSON: {"description":"...","calories":number,"protein":number,"carbs":number,"fat":number}`;
 
+      console.log('[parse-meal-photo] Calling Gemini API...');
       const result = await callGemini([{
         parts: [
           { text: prompt },
           { inlineData: { mimeType: mimeType || 'image/jpeg', data: imageBase64 } }
         ]
       }]);
+      console.log('[parse-meal-photo] Gemini API response status:', result.status);
       if (result.status !== 200) throw new Error(result.body.error?.message || 'Gemini API error');
 
       const raw = (result.body.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+      console.log('[parse-meal-photo] Gemini raw response (first 200 chars):', raw.substring(0, 200));
       const parsed = extractJSON(raw);
+      console.log('[parse-meal-photo] Parsed result:', parsed);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(parsed));
     } catch(e) {
-      console.error('[parse-meal-photo]', e.message);
+      console.error('[parse-meal-photo] ERROR:', e.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: e.message }));
     }

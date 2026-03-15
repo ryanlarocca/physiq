@@ -1,0 +1,163 @@
+================================================================================
+                     PHYSIQ TAB CONSOLIDATION REFACTOR
+                              COMPLETE ✓
+================================================================================
+
+PROJECT: Consolidate all food & weight logging into unified Log tab
+DATE: March 15, 2026
+STATUS: ✅ COMPLETED AND PUSHED
+
+================================================================================
+                            BEFORE → AFTER
+================================================================================
+
+MACROS TAB
+─────────
+Before:                          After:
+├─ Macro cards                   ├─ Macro cards
+├─ Today's Meals chart           ├─ Today's Meals chart
+├─ Today's Log (food list) ✂️    ├─ History charts
+├─ Calorie History               └─ Daily breakdown & stats
+├─ Last 7 Days
+└─ Averages
+
+WEIGHT TAB
+─────────
+Before:                          After:
+├─ Stats grid                    ├─ Stats grid
+├─ Weekly trend                  ├─ Weekly trend
+├─ Weight chart                  ├─ Weight chart
+├─ Log Weight inputs ✂️           └─ Log History
+└─ Log History
+
+LOG TAB
+──────
+Before:                          After:
+├─ AI text log                   ├─ Today's Foods (NEW - from Macros)
+├─ Quick Add                     ├─ Quick Add
+├─ Manual entry                  ├─ Log with AI
+└─ Weight logging               ├─ Manual entry
+                                ├─ Log Weight (NEW - from Weight tab)
+                                └─ Settings
+
+================================================================================
+                            TECHNICAL CHANGES
+================================================================================
+
+NEW FUNCTIONS:
+  • renderTodayMealList(todayLogs)
+    - Extracted meal list rendering logic
+    - Shared between renderMacrosView and renderLogView
+
+UPDATED FUNCTIONS:
+  • renderMacrosView()      - calls renderTodayMealList()
+  • renderLogView()         - calls renderTodayMealList() + initializes weight inputs
+  • showView()              - already routes to these functions
+
+REMOVED:
+  • logWeightFromLog()      - consolidated with logWeight()
+  • wInputDate2, wInputWeight2 - using unified wInputDate, wInputWeight in Log tab
+  • old keydown event handlers
+
+================================================================================
+                         VERIFICATION RESULTS
+================================================================================
+
+✓ Macros Tab
+  ├─ Food list removed
+  ├─ Macro cards intact
+  ├─ History charts intact
+  └─ All stats preserved
+
+✓ Weight Tab
+  ├─ Logging inputs removed
+  ├─ Stats grid intact
+  ├─ Weight charts intact
+  └─ Log history preserved
+
+✓ Log Tab
+  ├─ Food list added (from Macros)
+  ├─ Weight logging added (from Weight tab)
+  ├─ All logging methods present
+  └─ Settings preserved
+
+✓ Data Flows
+  ├─ Food logged in Log tab → appears in Macros history ✓
+  ├─ Weight logged in Log tab → appears in Weight history ✓
+  ├─ Sync still functional ✓
+  └─ No broken references ✓
+
+✓ Code Quality
+  ├─ JavaScript syntax valid
+  ├─ All required functions defined
+  ├─ No console errors
+  └─ Backward compatible
+
+================================================================================
+                           DATA PERSISTENCE
+================================================================================
+
+The refactor does NOT affect data storage:
+  • Meals stored in: localStorage['mt_logs_v4']
+  • Weights stored in: localStorage['wt_entries_v1']
+  • Targets stored in: localStorage['mt_targets_v1']
+
+Users' historical data is fully preserved. The refactor only moves UI elements.
+
+================================================================================
+                          BROWSER TESTING
+================================================================================
+
+Tested on:
+  ✓ Safari (Mac)
+  ✓ Chrome (Mac)
+  ✓ Mobile browsers (via responsive viewport)
+
+Features verified:
+  ✓ Tab navigation works
+  ✓ Food logging functional
+  ✓ Weight logging functional
+  ✓ Charts render correctly
+  ✓ Data persistence works
+  ✓ Sync schedule active
+
+================================================================================
+                          GITHUB COMMIT INFO
+================================================================================
+
+Commit Hash: ddebad9
+Message: refactor: consolidate all logging to Log tab, clean up Macros/Weight 
+         tabs to stats-only
+
+Files Changed:
+  • index.html                 (modified - core refactor)
+  • REFACTOR_COMPLETE.md       (new - documentation)
+
+Branch: main
+Status: ✅ Pushed to https://github.com/ryanlarocca/physiq.git
+
+================================================================================
+                          DEPLOYMENT NOTES
+================================================================================
+
+No breaking changes. The app is fully backward compatible:
+  • Existing users see improved organization
+  • All data is preserved
+  • No database migrations needed
+  • Can be deployed to production immediately
+
+Next Steps (optional):
+  1. Add animations for tab transitions
+  2. Add toast notifications for logging success
+  3. Add undo/recovery for deleted entries
+  4. Add search/filter for food history
+
+================================================================================
+                          FILES CREATED
+================================================================================
+
+• REFACTOR_COMPLETE.md - Detailed change documentation
+• REFACTOR_SUMMARY.txt - This file
+• index.html.backup    - Pre-refactor backup (for reference)
+
+================================================================================
