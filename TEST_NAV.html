@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Physiq Nav Test - Green Dot Fix</title>
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --card: #1a1a24;
+      --accent: #6c63ff;
+      --green: #43e97b;
+      --text: #f0f0f5;
+      --muted: #8888aa;
+      --border: #2e2e42;
+      --nav-height: 68px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .test-container {
+      max-width: 600px;
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+
+    .description {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+
+    .nav-preview {
+      position: relative;
+      height: 150px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      border: 1px dashed var(--border);
+      margin-bottom: 30px;
+      display: flex;
+      align-items: flex-end;
+      padding: 20px;
+      overflow: visible;
+    }
+
+    nav {
+      position: static;
+      display: flex;
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      z-index: 200;
+      overflow: visible;
+      gap: 10px;
+    }
+
+    .nav-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 8px 0;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: color 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      position: relative;
+    }
+
+    .nav-btn:hover {
+      color: var(--accent);
+    }
+
+    .nav-btn .nav-icon { font-size: 1.3rem; }
+    .nav-btn .nav-label { font-size: 0.7rem; position: relative; z-index: 1; }
+
+    .nav-btn.active {
+      color: var(--accent);
+    }
+
+    .nav-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      z-index: 999;
+      box-shadow: 0 0 3px rgba(67, 233, 123, 0.5);
+    }
+
+    .test-results {
+      text-align: left;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .result-item {
+      margin: 10px 0;
+      padding: 8px 12px;
+      background: rgba(67, 233, 123, 0.1);
+      border-left: 3px solid var(--green);
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+
+    .result-item.fail {
+      background: rgba(255, 107, 107, 0.1);
+      border-left-color: #ff6b6b;
+      color: #ff6b6b;
+    }
+
+    .result-item.pass {
+      color: var(--green);
+    }
+
+    .instruction {
+      background: rgba(108, 99, 255, 0.1);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 20px;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>✨ Physiq Nav Test</h1>
+    <p class="description">Verify that the green dot indicator is visible and not overlapping any button labels</p>
+
+    <div class="nav-preview">
+      <nav>
+        <button class="nav-btn active" onclick="toggleActive(this)">
+          <span class="nav-icon">🥗</span>
+          <span class="nav-label">Macros</span>
+        </button>
+        <button class="nav-btn" onclick="toggleActive(this)">
+          <span class="nav-icon">⚖️</span>
+          <span class="nav-label">Weight</span>
+        </button>
+        <button class="nav-btn" onclick="toggleActive(this)">
+          <span class="nav-icon">➕</span>
+          <span class="nav-label">Log</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="test-results">
+      <h3 style="color: var(--accent); margin-bottom: 15px;">✅ Test Checklist</h3>
+      <div class="result-item pass">✓ Green dot is 6px (enlarged from 4px for visibility)</div>
+      <div class="result-item pass">✓ Dot positioned at bottom: -8px (below button)</div>
+      <div class="result-item pass">✓ Dot z-index: 999 (above labels with z-index: 1)</div>
+      <div class="result-item pass">✓ nav container has overflow: visible</div>
+      <div class="result-item pass">✓ Subtle glow added for depth</div>
+      <div class="result-item pass">✓ All 3 buttons can be tested by clicking</div>
+    </div>
+
+    <div class="instruction">
+      <strong>📋 Test Instructions:</strong><br>
+      1. Click each button (Macros, Weight, Log) to activate it<br>
+      2. Verify the green dot appears below the icon<br>
+      3. Confirm no dot overlaps the label text<br>
+      4. Check dot is clearly visible with subtle glow<br>
+      5. All 3 buttons should render cleanly
+    </div>
+  </div>
+
+  <script>
+    function toggleActive(btn) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    // Auto-test on page load
+    console.log('✨ Physiq Nav Test Page Loaded');
+    console.log('Fix Summary:');
+    console.log('  - nav { overflow: visible } - ensures dot not clipped');
+    console.log('  - .nav-btn.active::after { z-index: 999 } - dot above labels (z-index: 1)');
+    console.log('  - Dot size: 6px (was 4px) - more visible');
+    console.log('  - Dot position: bottom: -8px (was -4px) - more separation');
+    console.log('  - Added glow effect for visual depth');
+  </script>
+</body>
+</html>
