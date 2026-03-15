@@ -102,18 +102,31 @@
     .nav-btn.active {
       color: var(--accent);
     }
-    .nav-btn.active::after {
-      content: '';
-      position: absolute;
-      bottom: -8px;
-      left: 50%;
-      transform: translateX(-50%);
+
+    /* ── Nav Indicator (Outside Nav Container) ────── */
+    .nav-indicator {
+      position: fixed;
+      bottom: env(safe-area-inset-bottom);
+      left: 0;
+      right: 0;
+      height: 6px;
+      z-index: 201;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav-indicator .dot {
       width: 6px;
       height: 6px;
       background: var(--green);
       border-radius: 50%;
-      z-index: 999;
       box-shadow: 0 0 3px rgba(67, 233, 123, 0.5);
+      transition: left 0.2s ease;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
     }
 
     /* ── Container & Views ──────────────────────────── */
@@ -632,6 +645,10 @@
   </button>
 </nav>
 
+<div class="nav-indicator">
+  <div class="dot"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div class="fav-toast" id="favToast"></div>
 
@@ -951,10 +968,25 @@ function showView(name, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
+  updateNavIndicator(btn);
 
   if (name === 'macros') { renderMacrosView(); }
   if (name === 'weight') { renderWeightView(); }
   if (name === 'log')    { renderLogView(); }
+}
+
+function updateNavIndicator(activeBtn) {
+  if (!activeBtn) return;
+  const indicator = document.querySelector('.nav-indicator .dot');
+  if (!indicator) return;
+  
+  const btnRect = activeBtn.getBoundingClientRect();
+  const btnCenterX = btnRect.left + btnRect.width / 2;
+  const navIndicator = document.querySelector('.nav-indicator');
+  const navRect = navIndicator.getBoundingClientRect();
+  const relativeX = btnCenterX - navRect.left;
+  
+  indicator.style.left = relativeX + 'px';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1814,6 +1846,12 @@ document.getElementById('wInputDate2').value = todayStr();
 syncFromGithub();
 renderMacrosView();
 renderLogView();
+
+// Initialize nav indicator position
+setTimeout(() => {
+  const activeBtn = document.querySelector('.nav-btn.active');
+  if (activeBtn) updateNavIndicator(activeBtn);
+}, 0);
 
 // Auto-sync macros every 30s
 setInterval(syncFromGithub, 30000);
