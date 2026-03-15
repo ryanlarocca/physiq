@@ -647,7 +647,9 @@
   </button>
 </nav>
 
-<!-- nav-indicator removed -->
+<div class="nav-indicator">
+  <div class="dot"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 <div class="fav-toast" id="favToast"></div>
@@ -779,12 +781,8 @@
   ══════════════════════════════════════════════════════════════ -->
   <div class="view" id="view-log">
 
-    <!-- Today's food items (moved from Macros tab) -->
-    <div class="section-title" style="margin-top:4px">Today's Foods</div>
-    <div class="meal-list" id="mealList"></div>
-
-    <!-- Quick add -->
-    <div class="section-title">Quick Add</div>
+    <!-- Quick add (FIRST) -->
+    <div class="section-title" style="margin-top:4px">Quick Add</div>
     <div class="favorites-grid">
       <button class="fav-btn" onclick="addFavorite(0)">🥣 Oatmeal + Egg Whites</button>
       <button class="fav-btn" onclick="addFavorite(1)">🍗 Chicken + Rice</button>
@@ -794,7 +792,7 @@
       <button class="fav-btn" onclick="addFavorite(5)">🍓 Strawberries</button>
     </div>
 
-    <!-- AI text log -->
+    <!-- AI text log (SECOND) -->
     <div class="section-title">Log with AI</div>
     <div class="ai-search-wrap">
       <div class="ai-search-row">
@@ -819,7 +817,7 @@
       <div class="ai-status" id="aiStatus"></div>
     </div>
 
-    <!-- Manual entry (collapsed) -->
+    <!-- Manual entry (THIRD) -->
     <div class="manual-toggle" onclick="toggleManual()">Enter macros manually ▾</div>
     <div class="log-form" id="manualForm" style="display:none">
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -846,7 +844,7 @@
       </div>
     </div>
 
-    <!-- Log weight (moved from Weight tab) -->
+    <!-- Log weight (FOURTH) -->
     <div class="section-title">Log Weight</div>
     <div class="card">
       <div class="input-row">
@@ -868,6 +866,10 @@
         <button class="btn" onclick="setWeightGoal()">Set Goal</button>
       </div>
     </div>
+
+    <!-- Today's foods list (LAST) -->
+    <div class="section-title">Today's Foods</div>
+    <div class="meal-list" id="mealList"></div>
 
     <!-- Settings -->
     <div class="section-title">Settings</div>
@@ -932,6 +934,32 @@ function formatDate(str) {
   const [y, m, d] = str.split('-');
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${months[parseInt(m)-1]} ${parseInt(d)}`;
+}
+
+// ── Success sound (Web Audio API) ────────────────────────────────────
+function playSuccessSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    
+    // Create a pleasant beep: rise from 500Hz to 800Hz
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.12);
+    
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+    
+    osc.start(now);
+    osc.stop(now + 0.12);
+  } catch(e) {
+    // Silent fail if Web Audio not available
+  }
 }
 
 function showToast(msg, color) {
@@ -1299,12 +1327,22 @@ function logMeal() {
   const logs = getLogs();
   logs.push({ date:todayStr(), time:nowTime12(), description:desc, calories:cal, protein, carbs, fat });
   saveLogs(logs);
+  
+  // Play success sound and show toast with item name
+  playSuccessSound();
+  const shortDesc = desc.length > 25 ? desc.substring(0, 22) + '...' : desc;
+  showToast(`✅ ${shortDesc} logged`);
+  
+  // Clear form
   document.getElementById('mealDesc').value = '';
   document.getElementById('mealCal').value  = '';
   document.getElementById('mealProtein').value = '';
   document.getElementById('mealCarbs').value = '';
   document.getElementById('mealFat').value  = '';
-  showToast('✓ Logged!');
+  
+  // Re-render views
+  renderMacrosView();
+  renderLogView();
 }
 
 const FAVORITES = [
@@ -1321,10 +1359,18 @@ function addFavorite(idx) {
   const logs = getLogs();
   logs.push({ date:todayStr(), time:nowTime12(), ...fav });
   saveLogs(logs);
+  
+  // Play success sound
+  playSuccessSound();
+  
   const ft = document.getElementById('favToast');
-  ft.textContent = `✓ ${fav.description.split(' ').slice(0,3).join(' ')} logged!`;
+  ft.textContent = `✅ ${fav.description.split(' ').slice(0,3).join(' ')} logged`;
   ft.classList.add('show');
   setTimeout(() => ft.classList.remove('show'), 2000);
+  
+  // Re-render views
+  renderMacrosView();
+  renderLogView();
 }
 
 function toggleManual() {
@@ -1717,9 +1763,15 @@ function logWeight() {
   saveEntries(entries);
   // Also sync to server if available
   fetch('/data.json', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(entries) }).catch(()=>{});
+  
+  // Play success sound and show toast with weight value
+  playSuccessSound();
   document.getElementById('wInputWeight').value = '';
+  showToast(`✅ ${weightVal.toFixed(1)} lbs logged`);
+  
+  // Re-render views
   renderWeightView();
-  showToast('✓ Logged ' + weightVal.toFixed(1) + ' lbs');
+  renderLogView();
 }
 
 function setWeightGoal() {
