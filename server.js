@@ -1,5 +1,6 @@
 const http = require('http');
 const fs = require('fs').promises;
+const { spawn } = require('child_process');
 const path = require('path');
 const url = require('url');
 
@@ -31,6 +32,17 @@ const server = http.createServer(async (req, res) => {
         await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(entries, null, 2));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+
+        // Trigger async Google Sheets sync (non-blocking)
+        const syncScript = path.join(process.cwd(), 'sync-weights.sh');
+        const child = spawn('/bin/bash', [syncScript], {
+          detached: true,
+          stdio: 'ignore',
+          cwd: process.cwd(),
+          env: { ...process.env, GOG_ACCOUNT: 'info@lrghomes.com', PATH: process.env.PATH || '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' }
+        });
+        child.unref();
+        console.log('[sync] Triggered weight sync to Google Sheets');
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON' }));
