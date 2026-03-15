@@ -25,7 +25,8 @@ async function callGemini(contents) {
       hostname: 'generativelanguage.googleapis.com',
       path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: 60000  // 60-second timeout for Gemini API
     };
     const req = https.request(options, res => {
       let data = '';
@@ -36,6 +37,10 @@ async function callGemini(contents) {
       });
     });
     req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Gemini API timeout (60s)'));
+    });
     req.write(body);
     req.end();
   });
