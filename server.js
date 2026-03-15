@@ -221,7 +221,25 @@ Rules: nutrition label → read exactly; food photo → estimate USDA averages. 
 
   try {
     const data = await fs.readFile(filePath);
-    res.writeHead(200, { 'Content-Type': mimeType, 'Cache-Control': 'public, max-age=3600' });
+    
+    // Determine cache strategy by content type
+    let cacheControl = 'public, max-age=3600';
+    if (ext === '.html') {
+      // HTML: always revalidate (no-cache + ETags)
+      cacheControl = 'public, no-cache, must-revalidate';
+    } else if (ext === '.json' && pathname !== '/data.json') {
+      // JSON manifests/config: revalidate
+      cacheControl = 'public, no-cache, must-revalidate';
+    } else if (['.js', '.css', '.svg', '.png', '.ico'].includes(ext)) {
+      // Assets: long cache (versioning handles updates)
+      cacheControl = 'public, max-age=86400, immutable';
+    }
+    
+    res.writeHead(200, { 
+      'Content-Type': mimeType, 
+      'Cache-Control': cacheControl,
+      'X-Content-Type-Options': 'nosniff'
+    });
     res.end(data);
   } catch (e) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
