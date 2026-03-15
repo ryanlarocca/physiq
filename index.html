@@ -1522,21 +1522,52 @@ function handlePhotoSelected(input) {
     console.warn('[PHOTO] No file selected');
     return;
   }
-  currentPhotoMime = file.type || 'image/jpeg';
-  console.log('[PHOTO] Set mimeType to:', currentPhotoMime);
+  // Always use image/jpeg after canvas compression (handles HEIC, HEIF, WEBP, etc.)
+  currentPhotoMime = 'image/jpeg';
+  document.getElementById('aiStatus').textContent = '🔄 Processing image...';
+
   const reader = new FileReader();
   reader.onload = e => {
-    const dataUrl = e.target.result;
-    console.log('[PHOTO] FileReader onload - dataUrl length:', dataUrl?.length);
-    currentPhotoBase64 = dataUrl.split(',')[1];
-    console.log('[PHOTO] Extracted base64 - length:', currentPhotoBase64?.length, 'first 50 chars:', currentPhotoBase64?.substring(0, 50));
-    document.getElementById('photoPreview').src = dataUrl;
-    document.getElementById('photoPreviewWrap').style.display = 'block';
-    document.getElementById('photoCaption').focus();
-    console.log('[PHOTO] Photo preview set and displayed');
+    const originalDataUrl = e.target.result;
+    console.log('[PHOTO] FileReader onload - dataUrl length:', originalDataUrl?.length, 'original size:', file.size);
+
+    // Compress & resize using Canvas — converts any format (HEIC, HEIF, WEBP) to JPEG
+    const img = new Image();
+    img.onload = () => {
+      const MAX_DIM = 1024; // max width or height
+      let w = img.width, h = img.height;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+        else { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      currentPhotoBase64 = compressedDataUrl.split(',')[1];
+      console.log('[PHOTO] Compressed: original', file.size, 'bytes →', Math.round(currentPhotoBase64.length * 0.75), 'bytes (', w, 'x', h, ')');
+      document.getElementById('photoPreview').src = compressedDataUrl;
+      document.getElementById('photoPreviewWrap').style.display = 'block';
+      document.getElementById('aiStatus').textContent = '';
+      document.getElementById('photoCaption').focus();
+      console.log('[PHOTO] Photo preview set and displayed');
+    };
+    img.onerror = () => {
+      // Fallback: use raw base64 if canvas fails (e.g., HEIC not supported)
+      console.warn('[PHOTO] Canvas compression failed, using raw base64');
+      currentPhotoMime = file.type || 'image/jpeg';
+      currentPhotoBase64 = originalDataUrl.split(',')[1];
+      document.getElementById('photoPreview').src = originalDataUrl;
+      document.getElementById('photoPreviewWrap').style.display = 'block';
+      document.getElementById('aiStatus').textContent = '';
+      document.getElementById('photoCaption').focus();
+    };
+    img.src = originalDataUrl;
   };
   reader.onerror = e => {
     console.error('[PHOTO] FileReader error:', e);
+    document.getElementById('aiStatus').textContent = '❌ Failed to read image file';
   };
   reader.readAsDataURL(file);
   console.log('[PHOTO] FileReader.readAsDataURL() called');
@@ -1563,11 +1594,11 @@ async function aiLogFromPhoto() {
   document.getElementById('aiStatus').textContent = '🤖 Analyzing photo...';
   try {
     let parsed;
-    // Try backend endpoint first (uses server-side API key) with 35s client timeout
+    // Try backend endpoint first (uses server-side API key) with 90s client timeout
     try {
       console.log('[PHOTO] Attempting backend endpoint /api/parse-meal-photo...');
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 35000);
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
       const payload = { imageBase64: currentPhotoBase64, mimeType: currentPhotoMime, caption };
       console.log('[PHOTO] Request payload size:', JSON.stringify(payload).length, 'bytes');
       const res = await fetch('/api/parse-meal-photo', {
@@ -1593,7 +1624,7 @@ async function aiLogFromPhoto() {
 Rules: nutrition label → read exactly; food photo → estimate USDA averages. Return ONLY valid JSON: {"description":"...","calories":number,"protein":number,"carbs":number,"fat":number}`;
       console.log('[PHOTO] Direct Gemini API call - prompt length:', prompt.length, 'image base64 length:', currentPhotoBase64.length);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ contents:[{ parts:[{ text:prompt },{ inlineData:{ mimeType:currentPhotoMime, data:currentPhotoBase64 } }] }] }),
