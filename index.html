@@ -1036,7 +1036,31 @@ const MACRO_SEED = [
 ];
 
 function getLogs() { return JSON.parse(localStorage.getItem(LOGS_KEY) || '[]'); }
-function saveLogs(logs) { localStorage.setItem(LOGS_KEY, JSON.stringify(logs)); }
+function saveLogs(logs) { 
+  localStorage.setItem(LOGS_KEY, JSON.stringify(logs)); 
+  // Sync to server immediately after local save
+  syncFullDataToServer();
+}
+
+async function syncFullDataToServer() {
+  try {
+    const macros = getLogs();
+    const weights = getEntries();
+    const payload = { macros, weights, settings: {} };
+    const res = await fetch('/data.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      console.warn('[sync] Failed to sync data to server:', res.status);
+    } else {
+      console.log('[sync] Full data synced to server (macros + weights)');
+    }
+  } catch(e) {
+    console.warn('[sync] Error syncing data:', e.message);
+  }
+}
 function getTargets() { return JSON.parse(localStorage.getItem(TARGETS_KEY) || JSON.stringify(DEFAULT_TARGETS)); }
 function saveTargets(t) { localStorage.setItem(TARGETS_KEY, JSON.stringify(t)); }
 function getDeleted() { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); }
@@ -1854,8 +1878,8 @@ function logWeight() {
   else entries.push({ date:dateVal, weight:weightVal });
   entries.sort((a,b) => a.date.localeCompare(b.date));
   saveEntries(entries);
-  // Also sync to server if available
-  fetch('/data.json', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(entries) }).catch(()=>{});
+  // Also sync to server if available (with full payload structure)
+  syncFullDataToServer();
   
   // Play success sound and show toast with weight value
   playSuccessSound();
@@ -1880,7 +1904,7 @@ function deleteWeight(date) {
   if (!confirm('Delete entry for ' + formatDate(date) + '?')) return;
   const entries = getEntries().filter(e => e.date !== date);
   saveEntries(entries);
-  fetch('/data.json', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(entries) }).catch(()=>{});
+  syncFullDataToServer();
   renderWeightView();
 }
 
