@@ -94,10 +94,25 @@
       flex-direction: column;
       align-items: center;
       gap: 3px;
+      position: relative;
     }
     .nav-btn .nav-icon { font-size: 1.3rem; }
-    .nav-btn .nav-label { font-size: 0.7rem; }
-    .nav-btn.active { color: var(--accent); }
+    .nav-btn .nav-label { font-size: 0.7rem; position: relative; z-index: 1; }
+    .nav-btn.active {
+      color: var(--accent);
+    }
+    .nav-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 4px;
+      background: var(--green);
+      border-radius: 50%;
+      z-index: 0;
+    }
 
     /* ── Container & Views ──────────────────────────── */
     .container {
