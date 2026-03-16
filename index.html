@@ -1042,25 +1042,6 @@ function saveLogs(logs) {
   syncFullDataToServer();
 }
 
-async function syncFullDataToServer() {
-  try {
-    const macros = getLogs();
-    const weights = getEntries();
-    const payload = { macros, weights, settings: {} };
-    const res = await fetch('/data.json', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      console.warn('[sync] Failed to sync data to server:', res.status);
-    } else {
-      console.log('[sync] Full data synced to server (macros + weights)');
-    }
-  } catch(e) {
-    console.warn('[sync] Error syncing data:', e.message);
-  }
-}
 function getTargets() { return JSON.parse(localStorage.getItem(TARGETS_KEY) || JSON.stringify(DEFAULT_TARGETS)); }
 function saveTargets(t) { localStorage.setItem(TARGETS_KEY, JSON.stringify(t)); }
 function getDeleted() { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); }
@@ -1973,42 +1954,122 @@ async function renderLogView() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MACRO GITHUB SYNC
+// SERVER SYNC — Single source of truth: /data.json on localhost server
+// GitHub Pages: localStorage only (no server). Localhost: full server sync.
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function syncFromGithub() {
+const PENDING_SYNC_KEY = 'physiq_pending_sync';
+let _serverAvailable = null; // null=unknown, true=online, false=offline
+
+function isLocalhostEnv() {
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
+function getPendingSync() {
+  try { return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'false'); }
+  catch(e) { return false; }
+}
+
+function setPendingSync(val) {
+  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(val));
+}
+
+// Load data from server (single source of truth on localhost).
+// On failure, fall back to localStorage. Handles pending offline entries on reconnect.
+async function loadDataFromServer() {
+  // GitHub Pages: no server — localStorage only
+  if (!isLocalhostEnv()) return;
+
   try {
-    let remote;
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const isGitHubPages = window.location.hostname.includes('github.io') || window.location.hostname.includes('github.com');
-    
-    if (isLocalhost) {
-      // On localhost:8888, fetch from /data.json (local server)
-      const res = await fetch('/data.json?t=' + Date.now());
-      if (!res.ok) return;
-      const data = await res.json();
-      remote = data.macros || [];
-    } else if (isGitHubPages) {
-      // On GitHub Pages, no server available - skip server sync and use localStorage only
-      return;
-    } else {
-      // Fallback for other environments
-      return;
-    }
-    
-    if (!Array.isArray(remote) || !remote.length) return;
+    const res = await fetch('/data.json?t=' + Date.now(), { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    const wasOffline = _serverAvailable === false;
+    _serverAvailable = true;
+
+    const remoteMacros  = Array.isArray(data.macros)  ? data.macros  : [];
+    const remoteWeights = Array.isArray(data.weights) ? data.weights : [];
+
+    // Merge macros: server is source of truth, local adds any new entries not on server
     const local = getLogs();
-    const map   = new Map();
-    remote.forEach(e => { if (!isDeleted(e)) map.set(`${e.date}|${e.time}|${e.description}`, e); });
-    local.forEach(e  => { if (!isDeleted(e)) { const k = `${e.date}|${e.time}|${e.description}`; if (!map.has(k)) map.set(k, e); } });
-    const merged = Array.from(map.values()).sort((a,b) => a.date!==b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time));
-    saveLogs(merged);
-    renderMacrosView();
-  } catch(e) {
-    console.debug('[sync] Debug info:', { 
-      hostname: window.location.hostname,
-      error: e.message 
+    const map = new Map();
+    remoteMacros.forEach(e => { if (!isDeleted(e)) map.set(`${e.date}|${e.time}|${e.description}`, e); });
+    local.forEach(e => {
+      if (!isDeleted(e)) {
+        const k = `${e.date}|${e.time}|${e.description}`;
+        if (!map.has(k)) map.set(k, e); // local-only entry (added offline)
+      }
     });
+    const mergedMacros = Array.from(map.values()).sort((a,b) =>
+      a.date !== b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time)
+    );
+
+    // Merge weights: server is source of truth, local fills gaps
+    const localWeights = getEntries();
+    const wMap = new Map();
+    remoteWeights.forEach(e => wMap.set(e.date, e));
+    localWeights.forEach(e => { if (!wMap.has(e.date)) wMap.set(e.date, e); });
+    const mergedWeights = Array.from(wMap.values()).sort((a,b) => a.date.localeCompare(b.date));
+
+    // Silently update localStorage without triggering a re-POST to server
+    localStorage.setItem(LOGS_KEY, JSON.stringify(mergedMacros));
+    localStorage.setItem(WT_STORE_KEY, JSON.stringify(mergedWeights));
+
+    // If we were offline and had pending entries, push merged data back to server
+    if (wasOffline && getPendingSync()) {
+      console.log('[sync] Back online — pushing pending offline entries to server');
+      setPendingSync(false);
+      await _pushToServer(mergedMacros, mergedWeights);
+    }
+
+    renderMacrosView();
+    renderWeightView();
+    renderLogView().catch(() => {});
+
+  } catch(e) {
+    if (_serverAvailable !== false) {
+      console.warn('[sync] Server unreachable — using localStorage (offline mode):', e.message);
+    }
+    _serverAvailable = false;
+    // localStorage already has the data — UI renders from it, no action needed
+  }
+}
+
+// Internal: push full payload to server. Returns true on success.
+async function _pushToServer(macros, weights) {
+  const settings = getTargets();
+  const payload = { macros, weights, settings };
+  try {
+    const res = await fetch('/data.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) {
+      console.warn('[sync] Server POST failed:', res.status);
+      return false;
+    }
+    const json = await res.json();
+    console.log('[sync] Server saved OK — macros:', (json.macros||[]).length, 'weights:', (json.weights||[]).length);
+    _serverAvailable = true;
+    return true;
+  } catch(e) {
+    console.warn('[sync] POST to server failed:', e.message);
+    _serverAvailable = false;
+    return false;
+  }
+}
+
+// Sync full data to server. On failure, mark pending for next reconnect.
+async function syncFullDataToServer() {
+  if (!isLocalhostEnv()) return; // GitHub Pages: no server
+  const macros  = getLogs();
+  const weights = getEntries();
+  const ok = await _pushToServer(macros, weights);
+  if (!ok) {
+    setPendingSync(true); // will retry on next successful loadDataFromServer()
   }
 }
 
@@ -2036,10 +2097,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // Set today on weight date pickers
 document.getElementById('wInputDate').value  = todayStr();
 
-// Initial render
-syncFromGithub();
+// Initial render (from localStorage immediately, then server sync overlays)
 renderMacrosView();
 renderLogView().catch(e => console.error('Error initializing log view:', e));
+loadDataFromServer(); // fetch from server; merges + re-renders on success
 
 // Initialize nav indicator position
 setTimeout(() => {
@@ -2047,12 +2108,12 @@ setTimeout(() => {
   if (activeBtn) updateNavIndicator(activeBtn);
 }, 0);
 
-// Auto-sync macros every 30s
-setInterval(syncFromGithub, 30000);
+// Poll server every 30s (localhost only — loadDataFromServer() is a no-op on GitHub Pages)
+setInterval(loadDataFromServer, 30000);
 
-// Re-sync on visibility change
+// Re-sync on tab becoming visible
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') syncFromGithub();
+  if (document.visibilityState === 'visible') loadDataFromServer();
 });
 
 // Service Worker

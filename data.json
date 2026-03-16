@@ -101,26 +101,17 @@
     },
     {
       "date": "2026-03-10",
-      "time": "11:59 PM",
-      "description": "Remaining meals - daily total restored from backup",
-      "calories": 2486.5,
-      "protein": 252,
-      "carbs": 261,
-      "fat": 46
-    },
-    {
-      "date": "2026-03-10",
-      "time": "12:54 PM",
-      "description": "Knudsen Cottage Cheese",
-      "calories": 172,
-      "protein": 16,
-      "carbs": 11,
-      "fat": 8
+      "time": "12:00 PM",
+      "description": "Daily total - Mar 10 restored from backup",
+      "calories": 2658.5,
+      "protein": 268,
+      "carbs": 272,
+      "fat": 54
     },
     {
       "date": "2026-03-11",
-      "time": "11:59 PM",
-      "description": "Daily total restored from backup",
+      "time": "12:00 PM",
+      "description": "Daily total - Mar 11 restored from backup",
       "calories": 2174,
       "protein": 228,
       "carbs": 228,
@@ -128,8 +119,8 @@
     },
     {
       "date": "2026-03-12",
-      "time": "11:59 PM",
-      "description": "Daily total restored from backup",
+      "time": "12:00 PM",
+      "description": "Daily total - Mar 12 restored from backup",
       "calories": 2395,
       "protein": 236,
       "carbs": 234,
@@ -137,8 +128,8 @@
     },
     {
       "date": "2026-03-13",
-      "time": "11:59 PM",
-      "description": "Daily total restored from backup",
+      "time": "12:00 PM",
+      "description": "Daily total - Mar 13 restored from backup",
       "calories": 1966,
       "protein": 207,
       "carbs": 205,
@@ -146,8 +137,8 @@
     },
     {
       "date": "2026-03-14",
-      "time": "11:59 PM",
-      "description": "Daily total restored from backup",
+      "time": "12:00 PM",
+      "description": "Daily total - Mar 14 restored from backup",
       "calories": 2093,
       "protein": 196,
       "carbs": 243,
@@ -908,18 +899,37 @@
       "weight": 190.4
     },
     {
+      "date": "2026-03-09",
+      "weight": 188.8
+    },
+    {
+      "date": "2026-03-10",
+      "weight": 189.6
+    },
+    {
+      "date": "2026-03-11",
+      "weight": 188.4
+    },
+    {
+      "date": "2026-03-12",
+      "weight": 189.2
+    },
+    {
       "date": "2026-03-13",
-      "weight": 190
+      "weight": 189
     },
     {
       "date": "2026-03-14",
-      "weight": 189.8
+      "weight": 187.6
+    },
+    {
+      "date": "2026-03-15",
+      "weight": 190
+    },
+    {
+      "date": "2026-03-16",
+      "weight": 188.5
     }
   ],
-  "settings": {
-    "calorieTarget": 2500,
-    "proteinTarget": 180,
-    "carbsTarget": 250,
-    "fatTarget": 80
-  }
+  "settings": {}
 }

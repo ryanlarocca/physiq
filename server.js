@@ -159,16 +159,24 @@ Rules: nutrition label → read exactly; food photo → estimate USDA averages. 
     return;
   }
 
-  // Handle data.json POST (save data)
+  // Handle data.json POST (save data — server is single source of truth)
   if (req.method === 'POST' && pathname === '/data.json') {
     try {
       const body = await readBody(req);
-      const entries = JSON.parse(body);
-      await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(entries, null, 2));
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
+      const payload = JSON.parse(body);
+      const macros   = Array.isArray(payload.macros)   ? payload.macros   : [];
+      const weights  = Array.isArray(payload.weights)  ? payload.weights  : [];
+      const settings = payload.settings && typeof payload.settings === 'object' ? payload.settings : {};
+      const toSave = { macros, weights, settings };
 
-      // Trigger async Google Sheets sync (non-blocking)
+      // Persist immediately (synchronous within async context)
+      await fs.writeFile(path.join(process.cwd(), 'data.json'), JSON.stringify(toSave, null, 2));
+
+      // Respond with full saved state so client can confirm
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, macros, weights, settings }));
+
+      // Trigger async Google Sheets sync (non-blocking, fire-and-forget)
       const syncScript = path.join(process.cwd(), 'sync-physiq.sh');
       const child = spawn('/bin/bash', [syncScript], {
         detached: true,
@@ -177,10 +185,11 @@ Rules: nutrition label → read exactly; food photo → estimate USDA averages. 
         env: { ...process.env, GOG_ACCOUNT: 'info@lrghomes.com', PATH: process.env.PATH || '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' }
       });
       child.unref();
-      console.log('[sync] Triggered Physiq sync (macros + weights) to Google Sheets');
+      console.log(`[sync] Saved ${macros.length} macros, ${weights.length} weights → data.json | triggering Sheets sync`);
     } catch (e) {
+      console.error('[data.json POST] Error:', e.message);
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      res.end(JSON.stringify({ error: 'Invalid JSON: ' + e.message }));
     }
     return;
   }
