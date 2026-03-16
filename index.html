@@ -1978,9 +1978,24 @@ async function renderLogView() {
 
 async function syncFromGithub() {
   try {
-    const res = await fetch('/macro-tracker/data.json?t=' + Date.now());
-    if (!res.ok) return;
-    const remote = await res.json();
+    let remote;
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isGitHubPages = window.location.hostname.includes('github.io') || window.location.hostname.includes('github.com');
+    
+    if (isLocalhost) {
+      // On localhost:8888, fetch from /data.json (local server)
+      const res = await fetch('/data.json?t=' + Date.now());
+      if (!res.ok) return;
+      const data = await res.json();
+      remote = data.macros || [];
+    } else if (isGitHubPages) {
+      // On GitHub Pages, no server available - skip server sync and use localStorage only
+      return;
+    } else {
+      // Fallback for other environments
+      return;
+    }
+    
     if (!Array.isArray(remote) || !remote.length) return;
     const local = getLogs();
     const map   = new Map();
@@ -1989,7 +2004,12 @@ async function syncFromGithub() {
     const merged = Array.from(map.values()).sort((a,b) => a.date!==b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time));
     saveLogs(merged);
     renderMacrosView();
-  } catch(_) {}
+  } catch(e) {
+    console.debug('[sync] Debug info:', { 
+      hostname: window.location.hostname,
+      error: e.message 
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
