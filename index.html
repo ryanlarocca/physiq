@@ -891,12 +891,7 @@ CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_entries(date);</pre>
       <button class="btn-green" onclick="saveGoals()">Save Goals</button>
       <span class="save-confirm" id="saveConfirm">✓ Saved!</span>
 
-      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-        <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:6px">🤖 Gemini API Key (for AI food logging)</label>
-        <input type="password" id="geminiKeyInput" placeholder="AIza..." style="margin-bottom:8px">
-        <button class="btn-green" onclick="saveGeminiKey()">Save Key</button>
-        <span class="save-confirm" id="keyConfirm">✓ Saved!</span>
-      </div>
+      
     </div>
 
   </div><!-- end macros view -->
@@ -1560,19 +1555,21 @@ function toggleSettings() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const GEMINI_KEY_LS = 'mt_gemini_key';
+const GEMINI_KEY_HARDCODED = 'AIzaSyBzcMr_IdjDR4RTs3GTwLR0z6Rtu-Dk7O8';
 async function getGeminiKey() {
-  // Check localStorage first
+  // Always use hardcoded key — no user input needed
+  return GEMINI_KEY_HARDCODED;
+  
+  // (legacy code below kept for reference but never reached)
   let key = localStorage.getItem(GEMINI_KEY_LS) || '';
   if (key) return key;
   
-  // Try to fetch from server if empty
   try {
     const res = await fetch('/api/gemini-key');
     if (res.ok) {
       const data = await res.json();
       if (data.key) {
         key = data.key;
-        // Cache it in localStorage for next time
         localStorage.setItem(GEMINI_KEY_LS, key);
       }
     }
