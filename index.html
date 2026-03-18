@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" type="image/png" href="icon-192.png">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --bg: #0f0f13;
@@ -654,6 +655,49 @@
 <div class="toast" id="toast"></div>
 <div class="fav-toast" id="favToast"></div>
 
+<!-- Supabase setup overlay (shown if tables don't exist yet) -->
+<div id="setupOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,19,0.97);z-index:9999;overflow-y:auto;padding:24px">
+  <div style="max-width:540px;margin:0 auto;padding-top:40px">
+    <div style="font-size:2rem;margin-bottom:8px">⚡ One-Time Setup</div>
+    <div style="color:var(--muted);margin-bottom:20px;font-size:0.9rem">Physiq needs a Supabase database. Run this SQL once to create it, then reload.</div>
+    <div style="background:var(--card2);border-radius:12px;padding:16px;border:1px solid var(--border);margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:0.8rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.08em">SQL to run</span>
+        <button onclick="copySetupSQL()" style="background:var(--accent);border:none;color:white;padding:5px 14px;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer">Copy SQL</button>
+      </div>
+      <pre id="setupSQL" style="font-size:0.72rem;color:var(--green);white-space:pre-wrap;word-break:break-all;line-height:1.5;max-height:280px;overflow-y:auto">CREATE TABLE IF NOT EXISTS weight_entries (
+  id bigserial PRIMARY KEY,
+  date text NOT NULL,
+  weight float NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS macro_entries (
+  id bigserial PRIMARY KEY,
+  date text NOT NULL,
+  calories float NOT NULL DEFAULT 0,
+  protein float NOT NULL DEFAULT 0,
+  carbs float NOT NULL DEFAULT 0,
+  fat float NOT NULL DEFAULT 0,
+  food_name text NOT NULL DEFAULT '',
+  time_logged text,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE weight_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE macro_entries ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "allow_all_weight" ON weight_entries FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_all_macros" ON macro_entries FOR ALL TO anon USING (true) WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS idx_weight_date ON weight_entries(date);
+CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_entries(date);</pre>
+    </div>
+    <a href="https://supabase.com/dashboard/project/msmlqdrfsieixudgsced/sql/new" target="_blank" style="display:block;background:var(--accent);color:white;text-align:center;padding:14px;border-radius:12px;font-weight:700;text-decoration:none;margin-bottom:12px">Open Supabase SQL Editor →</a>
+    <button onclick="location.reload()" style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:12px;font-size:0.9rem;cursor:pointer">Reload after running SQL</button>
+  </div>
+</div>
+
 <div class="container">
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -1006,65 +1050,169 @@ function updateNavIndicator(activeBtn) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SUPABASE CLIENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SUPABASE_URL = 'https://msmlqdrfsieixudgsced.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zbWxxZHJmc2llaXh1ZGdzY2VkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzUxMTQsImV4cCI6MjA4OTQ1MTExNH0.YFn7AUZlfNerg3o9QtTsk8nE_QOSiz4xFe6vxs9aBA0';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// In-memory cache (loaded from Supabase on init, updated on each write)
+let _weightCache = [];   // [{date, weight, id}]
+let _macroCache  = [];   // [{date, time_logged, food_name, calories, protein, carbs, fat, id}]
+let _dbReady = false;    // true once Supabase tables confirmed to exist
+
+function copySetupSQL() {
+  const sql = document.getElementById('setupSQL').textContent;
+  navigator.clipboard.writeText(sql).then(() => showToast('SQL copied!'));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MACROS — Storage
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LOGS_KEY     = 'mt_logs_v1';
 const TARGETS_KEY  = 'mt_targets_v1';
-const DELETED_KEY  = 'mt_deleted';
 const DEFAULT_TARGETS = { calories: 2500, protein: 180, carbs: 250, fat: 80 };
 
-const MACRO_SEED = [
-  {date:"2026-03-01",time:"08:30",description:"Oatmeal + protein shake",calories:520,protein:42,carbs:65,fat:8},
-  {date:"2026-03-01",time:"12:00",description:"Chicken rice bowl",calories:680,protein:52,carbs:78,fat:14},
-  {date:"2026-03-01",time:"15:30",description:"Greek yogurt + almonds",calories:280,protein:18,carbs:22,fat:12},
-  {date:"2026-03-01",time:"19:00",description:"Salmon + veggies",calories:520,protein:48,carbs:30,fat:18},
-  {date:"2026-03-02",time:"08:00",description:"Eggs + toast",calories:480,protein:32,carbs:42,fat:16},
-  {date:"2026-03-02",time:"13:00",description:"Turkey sandwich",calories:620,protein:44,carbs:68,fat:15},
-  {date:"2026-03-02",time:"19:30",description:"Ground beef + rice",calories:740,protein:58,carbs:72,fat:20},
-  {date:"2026-03-03",time:"08:30",description:"Protein shake + banana",calories:380,protein:35,carbs:48,fat:5},
-  {date:"2026-03-03",time:"12:30",description:"Grilled chicken salad",calories:520,protein:48,carbs:28,fat:18},
-  {date:"2026-03-03",time:"18:00",description:"Steak + potatoes",calories:820,protein:62,carbs:58,fat:28},
-  {date:"2026-03-04",time:"09:00",description:"Breakfast burrito",calories:640,protein:38,carbs:72,fat:22},
-  {date:"2026-03-04",time:"14:00",description:"Tuna wrap",calories:480,protein:42,carbs:48,fat:12},
-  {date:"2026-03-04",time:"19:00",description:"Pasta + chicken",calories:780,protein:54,carbs:92,fat:16},
-  {date:"2026-03-05",time:"08:00",description:"Oatmeal + eggs",calories:560,protein:36,carbs:62,fat:14},
-  {date:"2026-03-05",time:"13:00",description:"Chicken rice bowl",calories:680,protein:52,carbs:78,fat:14},
-  {date:"2026-03-05",time:"19:00",description:"Salmon + sweet potato",calories:620,protein:50,carbs:52,fat:20},
-  {date:"2026-03-06",time:"08:30",description:"Greek yogurt parfait",calories:420,protein:28,carbs:52,fat:10},
-  {date:"2026-03-06",time:"12:00",description:"Beef stir fry",calories:720,protein:56,carbs:68,fat:18},
-  {date:"2026-03-06",time:"19:00",description:"Chicken + veggies",calories:580,protein:54,carbs:32,fat:16},
-  {date:"2026-03-07",time:"08:00",description:"Protein shake + oats",calories:500,protein:44,carbs:58,fat:8},
-  {date:"2026-03-07",time:"13:00",description:"Turkey bowl",calories:660,protein:50,carbs:70,fat:16},
-  {date:"2026-03-07",time:"19:00",description:"Ground beef tacos",calories:780,protein:58,carbs:72,fat:24},
-];
 
-function getLogs() { return JSON.parse(localStorage.getItem(LOGS_KEY) || '[]'); }
-function saveLogs(logs) { 
-  localStorage.setItem(LOGS_KEY, JSON.stringify(logs)); 
-  // Sync to server immediately after local save
-  syncFullDataToServer();
-}
+// getLogs returns the in-memory cache (sync, for all render functions)
+function getLogs() { return _macroCache; }
 
+// getTargets / saveTargets remain in localStorage (they're settings, not cross-device data)
 function getTargets() { return JSON.parse(localStorage.getItem(TARGETS_KEY) || JSON.stringify(DEFAULT_TARGETS)); }
 function saveTargets(t) { localStorage.setItem(TARGETS_KEY, JSON.stringify(t)); }
-function getDeleted() { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]')); }
-function addDeleted(entry) {
-  const d = getDeleted();
-  d.add(`${entry.date}|${entry.time}|${entry.description}`);
-  localStorage.setItem(DELETED_KEY, JSON.stringify([...d]));
-}
-function isDeleted(entry) { return getDeleted().has(`${entry.date}|${entry.time}|${entry.description}`); }
 
-// Seed macro data on first load
-(function seedMacros() {
-  const PURGE_KEY = 'mt_purged_v3';
-  if (!localStorage.getItem(PURGE_KEY)) {
-    localStorage.removeItem(LOGS_KEY);
-    localStorage.setItem(PURGE_KEY, '1');
+// ── Supabase Macro Operations ─────────────────────────────────────────────
+
+async function insertMacroEntry(entry) {
+  // entry: {date, time, description, calories, protein, carbs, fat}
+  const row = {
+    date: entry.date,
+    food_name: entry.description || '',
+    time_logged: entry.time || null,
+    calories: entry.calories || 0,
+    protein:  entry.protein  || 0,
+    carbs:    entry.carbs    || 0,
+    fat:      entry.fat      || 0,
+  };
+  const { data, error } = await db.from('macro_entries').insert(row).select().single();
+  if (error) throw error;
+  // Add to in-memory cache (normalize to app format)
+  _macroCache.push(dbMacroToApp(data));
+  return data;
+}
+
+async function deleteMacroById(id) {
+  const { error } = await db.from('macro_entries').delete().eq('id', id);
+  if (error) throw error;
+  _macroCache = _macroCache.filter(e => e.id !== id);
+}
+
+// Convert DB row → app format (uses 'description' and 'time' internally)
+function dbMacroToApp(row) {
+  return {
+    id:          row.id,
+    date:        row.date,
+    time:        row.time_logged || '',
+    description: row.food_name  || '',
+    calories:    row.calories   || 0,
+    protein:     row.protein    || 0,
+    carbs:       row.carbs      || 0,
+    fat:         row.fat        || 0,
+  };
+}
+
+// Convert DB weight row → app format
+function dbWeightToApp(row) {
+  return { id: row.id, date: row.date, weight: row.weight };
+}
+
+// ── Supabase Weight Operations ────────────────────────────────────────────
+
+async function upsertWeightEntry(date, weight) {
+  // Check if exists in cache
+  const existing = _weightCache.find(e => e.date === date);
+  if (existing) {
+    const { data, error } = await db.from('weight_entries').update({ weight }).eq('id', existing.id).select().single();
+    if (error) throw error;
+    existing.weight = weight;
+    return data;
+  } else {
+    const { data, error } = await db.from('weight_entries').insert({ date, weight }).select().single();
+    if (error) throw error;
+    _weightCache.push(dbWeightToApp(data));
+    _weightCache.sort((a,b) => a.date.localeCompare(b.date));
+    return data;
   }
-  if (!localStorage.getItem(LOGS_KEY)) saveLogs(MACRO_SEED);
-})();
+}
+
+async function deleteWeightById(id) {
+  const { error } = await db.from('weight_entries').delete().eq('id', id);
+  if (error) throw error;
+  _weightCache = _weightCache.filter(e => e.id !== id);
+}
+
+// getEntries returns in-memory weight cache (sync)
+function getEntries() { return _weightCache; }
+
+// Weight goal stays in localStorage (personal preference, no sync needed)
+function getWGoal() { const g = localStorage.getItem('wt_goal_v1'); return g ? parseFloat(g) : null; }
+function saveWGoal(g) { localStorage.setItem('wt_goal_v1', g.toString()); }
+
+// ── Migration: localStorage → Supabase (runs once on first Supabase load) ──
+
+async function migrateLocalStorageToSupabase() {
+  const MIGRATED_KEY = 'physiq_migrated_to_supabase_v1';
+  if (localStorage.getItem(MIGRATED_KEY)) return; // already done
+
+  const oldWeights = JSON.parse(localStorage.getItem('wt_entries_v1') || '[]');
+  const oldMacros  = JSON.parse(localStorage.getItem('mt_logs_v1')    || '[]');
+
+  if (!oldWeights.length && !oldMacros.length) {
+    localStorage.setItem(MIGRATED_KEY, '1');
+    return;
+  }
+
+  console.log(`[migrate] Migrating ${oldWeights.length} weights + ${oldMacros.length} macros from localStorage...`);
+
+  // Migrate weights in batches
+  if (oldWeights.length) {
+    const existingDates = new Set(_weightCache.map(e => e.date));
+    const toInsert = oldWeights.filter(e => !existingDates.has(e.date)).map(e => ({ date: e.date, weight: e.weight }));
+    if (toInsert.length) {
+      const { data, error } = await db.from('weight_entries').insert(toInsert).select();
+      if (!error && data) {
+        data.forEach(row => _weightCache.push(dbWeightToApp(row)));
+        _weightCache.sort((a,b) => a.date.localeCompare(b.date));
+      }
+    }
+  }
+
+  // Migrate macros in batches
+  if (oldMacros.length) {
+    const existingKeys = new Set(_macroCache.map(e => `${e.date}|${e.time}|${e.description}`));
+    const toInsert = oldMacros.filter(e => !existingKeys.has(`${e.date}|${e.time}|${e.description}`)).map(e => ({
+      date: e.date, food_name: e.description || '', time_logged: e.time || null,
+      calories: e.calories || 0, protein: e.protein || 0, carbs: e.carbs || 0, fat: e.fat || 0,
+    }));
+    if (toInsert.length) {
+      // Insert in chunks of 100
+      for (let i = 0; i < toInsert.length; i += 100) {
+        const chunk = toInsert.slice(i, i + 100);
+        const { data, error } = await db.from('macro_entries').insert(chunk).select();
+        if (!error && data) data.forEach(row => _macroCache.push(dbMacroToApp(row)));
+      }
+    }
+  }
+
+  // Clear old localStorage data
+  localStorage.removeItem('wt_entries_v1');
+  localStorage.removeItem('mt_logs_v1');
+  localStorage.removeItem('mt_purged_v3');
+  localStorage.removeItem('mt_deleted');
+  localStorage.setItem(MIGRATED_KEY, '1');
+  console.log('[migrate] Migration complete. localStorage cleared.');
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MACROS — Render
@@ -1092,13 +1240,11 @@ function nowTime12() {
 }
 
 function renderTodayMealList(todayLogs) {
-  const allLogs = getLogs();
   const list = document.getElementById('mealList');
   if (!todayLogs.length) {
     list.innerHTML = '<div class="empty-state">No meals logged today yet. Tap ➕ to add one.</div>';
   } else {
     list.innerHTML = todayLogs.map(meal => {
-      const idx = allLogs.findIndex(l => l.date===meal.date && l.time===meal.time && l.description===meal.description);
       return `<div class="meal-item">
         <div class="meal-info">
           <div class="meal-name">${meal.description}</div>
@@ -1110,7 +1256,7 @@ function renderTodayMealList(todayLogs) {
           </div>
         </div>
         <div class="meal-time">${meal.time}</div>
-        <button class="delete-btn" onclick="deleteMeal(${idx})">×</button>
+        <button class="delete-btn" onclick="deleteMeal(${meal.id})">×</button>
       </div>`;
     }).join('');
   }
@@ -1318,40 +1464,44 @@ function renderMacroHistory() {
 // MACROS — Logging
 // ═══════════════════════════════════════════════════════════════════════════
 
-function deleteMeal(idx) {
-  const logs = getLogs();
-  if (logs[idx]) addDeleted(logs[idx]);
-  logs.splice(idx, 1);
-  saveLogs(logs);
-  renderMacrosView();
+async function deleteMeal(id) {
+  try {
+    await deleteMacroById(id);
+    renderMacrosView();
+    showToast('Meal deleted', '#ff6b6b');
+  } catch(e) {
+    console.error('Delete meal error:', e);
+    showToast('Delete failed: ' + e.message, '#ff6b6b');
+  }
 }
 
-function logMeal() {
+async function logMeal() {
   const desc    = document.getElementById('mealDesc').value.trim();
   const cal     = parseInt(document.getElementById('mealCal').value) || 0;
   const protein = parseInt(document.getElementById('mealProtein').value) || 0;
   const carbs   = parseInt(document.getElementById('mealCarbs').value) || 0;
   const fat     = parseInt(document.getElementById('mealFat').value) || 0;
   if (!desc) { document.getElementById('mealDesc').focus(); return; }
-  const logs = getLogs();
-  logs.push({ date:todayStr(), time:nowTime12(), description:desc, calories:cal, protein, carbs, fat });
-  saveLogs(logs);
   
-  // Play success sound and show toast with item name
-  playSuccessSound();
-  const shortDesc = desc.length > 25 ? desc.substring(0, 22) + '...' : desc;
-  showToast(`✅ ${shortDesc} logged`);
-  
-  // Clear form
-  document.getElementById('mealDesc').value = '';
-  document.getElementById('mealCal').value  = '';
-  document.getElementById('mealProtein').value = '';
-  document.getElementById('mealCarbs').value = '';
-  document.getElementById('mealFat').value  = '';
-  
-  // Re-render views
-  renderMacrosView();
-  renderLogView();
+  try {
+    await insertMacroEntry({ date:todayStr(), time:nowTime12(), description:desc, calories:cal, protein, carbs, fat });
+    playSuccessSound();
+    const shortDesc = desc.length > 25 ? desc.substring(0, 22) + '...' : desc;
+    showToast(`✅ ${shortDesc} logged`);
+    
+    // Clear form
+    document.getElementById('mealDesc').value = '';
+    document.getElementById('mealCal').value  = '';
+    document.getElementById('mealProtein').value = '';
+    document.getElementById('mealCarbs').value = '';
+    document.getElementById('mealFat').value  = '';
+    
+    renderMacrosView();
+    renderLogView();
+  } catch(e) {
+    console.error('logMeal error:', e);
+    showToast('Save failed: ' + e.message, '#ff6b6b');
+  }
 }
 
 const FAVORITES = [
@@ -1363,23 +1513,23 @@ const FAVORITES = [
   { description:'Strawberries (1 serving, ~152g)',                           calories:49,  protein:1,  carbs:12, fat:0 },
 ];
 
-function addFavorite(idx) {
+async function addFavorite(idx) {
   const fav = FAVORITES[idx];
-  const logs = getLogs();
-  logs.push({ date:todayStr(), time:nowTime12(), ...fav });
-  saveLogs(logs);
-  
-  // Play success sound
-  playSuccessSound();
-  
-  const ft = document.getElementById('favToast');
-  ft.textContent = `✅ ${fav.description.split(' ').slice(0,3).join(' ')} logged`;
-  ft.classList.add('show');
-  setTimeout(() => ft.classList.remove('show'), 2000);
-  
-  // Re-render views
-  renderMacrosView();
-  renderLogView();
+  try {
+    await insertMacroEntry({ date:todayStr(), time:nowTime12(), ...fav });
+    playSuccessSound();
+    
+    const ft = document.getElementById('favToast');
+    ft.textContent = `✅ ${fav.description.split(' ').slice(0,3).join(' ')} logged`;
+    ft.classList.add('show');
+    setTimeout(() => ft.classList.remove('show'), 2000);
+    
+    renderMacrosView();
+    renderLogView();
+  } catch(e) {
+    console.error('addFavorite error:', e);
+    showToast('Save failed: ' + e.message, '#ff6b6b');
+  }
 }
 
 function toggleManual() {
@@ -1481,9 +1631,7 @@ Food: "${text}"`;
       const raw = (data.candidates?.[0]?.content?.parts || []).map(p => p.text||'').join('').trim();
       parsed = extractJSON(raw);
     }
-    const logs = getLogs();
-    logs.push({ date:todayStr(), time:nowTime12(), ...parsed });
-    saveLogs(logs);
+    await insertMacroEntry({ date:todayStr(), time:nowTime12(), ...parsed });
     input.value = '';
     const shortDesc = (parsed.description || text).split(',')[0].substring(0, 30);
     document.getElementById('aiStatus').textContent = `✓ ${parsed.description} — ${parsed.calories} cal`;
@@ -1626,9 +1774,7 @@ Rules: nutrition label → read exactly; food photo → estimate USDA averages. 
       console.log('[PHOTO] Successfully parsed from Gemini API');
     }
     console.log('[PHOTO] Final parsed result:', parsed);
-    const logs = getLogs();
-    logs.push({ date:todayStr(), time:nowTime12(), ...parsed });
-    saveLogs(logs);
+    await insertMacroEntry({ date:todayStr(), time:nowTime12(), ...parsed });
     clearPhoto();
     const shortDesc = (parsed.description || 'meal').split(',')[0].substring(0, 30);
     document.getElementById('aiStatus').textContent = `✓ ${parsed.description} — ${parsed.calories} cal`;
@@ -1644,26 +1790,6 @@ Rules: nutrition label → read exactly; food photo → estimate USDA averages. 
     btn.disabled = false; btn.textContent = 'Analyze & Log';
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// WEIGHT — Storage
-// ═══════════════════════════════════════════════════════════════════════════
-
-const WT_STORE_KEY = 'wt_entries_v1';
-const WT_GOAL_KEY  = 'wt_goal_v1';
-
-function getEntries() { return JSON.parse(localStorage.getItem(WT_STORE_KEY) || '[]'); }
-function saveEntries(e) { localStorage.setItem(WT_STORE_KEY, JSON.stringify(e)); }
-function getWGoal() { const g = localStorage.getItem(WT_GOAL_KEY); return g ? parseFloat(g) : null; }
-function saveWGoal(g) { localStorage.setItem(WT_GOAL_KEY, g.toString()); }
-
-// Seed weight data on first load
-(function seedWeight() {
-  if (!getEntries().length) {
-    const seed = [{"date":"2025-07-28","weight":199.0},{"date":"2025-07-29","weight":199.2},{"date":"2025-07-31","weight":197.6},{"date":"2025-08-01","weight":196.8},{"date":"2025-08-02","weight":197.2},{"date":"2025-08-03","weight":196.6},{"date":"2025-08-04","weight":198.4},{"date":"2025-08-07","weight":196.2},{"date":"2025-08-08","weight":194.8},{"date":"2025-08-09","weight":194.6},{"date":"2025-08-10","weight":196.6},{"date":"2025-08-11","weight":194.4},{"date":"2025-08-12","weight":193.6},{"date":"2025-08-13","weight":194.4},{"date":"2025-08-14","weight":194.0},{"date":"2025-08-15","weight":196.3},{"date":"2025-08-16","weight":194.4},{"date":"2025-08-17","weight":192.0},{"date":"2025-08-18","weight":192.8},{"date":"2025-08-19","weight":192.8},{"date":"2025-08-20","weight":192.8},{"date":"2025-08-21","weight":192.2},{"date":"2025-08-22","weight":191.0},{"date":"2025-08-23","weight":192.6},{"date":"2025-08-24","weight":194.4},{"date":"2025-08-25","weight":192.2},{"date":"2025-08-26","weight":195.0},{"date":"2025-08-27","weight":195.6},{"date":"2025-08-28","weight":195.0},{"date":"2025-08-29","weight":195.8},{"date":"2025-08-30","weight":195.0},{"date":"2025-08-31","weight":195.8},{"date":"2025-09-01","weight":196.4},{"date":"2025-09-02","weight":195.4},{"date":"2025-09-03","weight":195.0},{"date":"2025-09-04","weight":195.0},{"date":"2025-09-05","weight":198.4},{"date":"2025-09-06","weight":198.4},{"date":"2025-09-07","weight":195.6},{"date":"2025-09-12","weight":191.0},{"date":"2025-09-14","weight":193.0},{"date":"2025-09-15","weight":193.4},{"date":"2025-09-16","weight":193.6},{"date":"2025-09-17","weight":195.4},{"date":"2025-09-18","weight":196.4},{"date":"2025-09-19","weight":196.4},{"date":"2025-09-20","weight":198.3},{"date":"2025-09-21","weight":197.3},{"date":"2025-09-22","weight":198.0},{"date":"2025-09-23","weight":196.8},{"date":"2025-09-24","weight":195.8},{"date":"2025-09-25","weight":194.8},{"date":"2025-09-26","weight":196.0},{"date":"2025-09-27","weight":198.4},{"date":"2025-09-28","weight":195.4},{"date":"2025-09-29","weight":196.4},{"date":"2025-09-30","weight":197.4},{"date":"2025-10-01","weight":198.4},{"date":"2025-10-02","weight":199.2},{"date":"2025-10-03","weight":197.6},{"date":"2025-10-04","weight":197.8},{"date":"2025-10-06","weight":197.4},{"date":"2025-10-07","weight":196.4},{"date":"2025-10-08","weight":196.0},{"date":"2025-10-09","weight":197.2},{"date":"2025-10-10","weight":196.4},{"date":"2025-10-11","weight":197.4},{"date":"2025-10-12","weight":196.0},{"date":"2025-10-13","weight":196.8},{"date":"2025-10-14","weight":196.2},{"date":"2025-10-15","weight":195.6},{"date":"2025-10-16","weight":196.2},{"date":"2025-10-17","weight":196.0},{"date":"2025-10-18","weight":195.5},{"date":"2025-10-20","weight":195.0},{"date":"2025-10-21","weight":197.0},{"date":"2025-10-22","weight":195.2},{"date":"2025-10-23","weight":194.8},{"date":"2025-10-24","weight":194.2},{"date":"2025-10-25","weight":194.8},{"date":"2025-10-26","weight":194.2},{"date":"2025-10-27","weight":193.0},{"date":"2025-10-28","weight":194.8},{"date":"2025-10-29","weight":195.4},{"date":"2025-10-30","weight":192.8},{"date":"2025-11-02","weight":195.0},{"date":"2025-11-03","weight":195.0},{"date":"2025-11-04","weight":193.4},{"date":"2025-11-05","weight":192.6},{"date":"2025-11-06","weight":192.8},{"date":"2025-11-07","weight":193.8},{"date":"2025-11-08","weight":194.0},{"date":"2025-11-09","weight":194.0},{"date":"2025-11-10","weight":193.8},{"date":"2025-11-11","weight":193.6},{"date":"2025-11-12","weight":193.4},{"date":"2025-11-13","weight":192.2},{"date":"2025-11-14","weight":192.0},{"date":"2025-11-15","weight":192.4},{"date":"2025-11-16","weight":193.0},{"date":"2025-11-17","weight":192.8},{"date":"2025-11-18","weight":193.2},{"date":"2025-11-19","weight":193.8},{"date":"2025-11-20","weight":191.6},{"date":"2025-11-22","weight":193.0},{"date":"2025-11-23","weight":194.0},{"date":"2025-11-24","weight":190.2},{"date":"2025-11-25","weight":191.0},{"date":"2025-11-29","weight":192.6},{"date":"2025-11-30","weight":192.0},{"date":"2025-12-01","weight":192.0},{"date":"2025-12-02","weight":190.6},{"date":"2025-12-03","weight":194.6},{"date":"2025-12-04","weight":192.4},{"date":"2025-12-05","weight":190.8},{"date":"2025-12-06","weight":190.8},{"date":"2025-12-07","weight":193.0},{"date":"2025-12-08","weight":190.4},{"date":"2025-12-09","weight":189.8},{"date":"2025-12-10","weight":191.6},{"date":"2025-12-11","weight":189.4},{"date":"2025-12-12","weight":190.6},{"date":"2025-12-13","weight":190.8},{"date":"2025-12-14","weight":192.4},{"date":"2025-12-15","weight":191.6},{"date":"2025-12-16","weight":187.6},{"date":"2025-12-17","weight":189.2},{"date":"2025-12-18","weight":189.8},{"date":"2025-12-19","weight":189.4},{"date":"2025-12-20","weight":189.4},{"date":"2025-12-21","weight":188.4},{"date":"2025-12-22","weight":189.4},{"date":"2025-12-23","weight":188.8},{"date":"2025-12-24","weight":188.8},{"date":"2025-12-26","weight":188.8},{"date":"2025-12-27","weight":189.4},{"date":"2025-12-28","weight":189.4},{"date":"2025-12-29","weight":188.0},{"date":"2025-12-30","weight":188.8},{"date":"2025-12-31","weight":187.6},{"date":"2026-01-01","weight":186.2},{"date":"2026-01-02","weight":186.6},{"date":"2026-01-03","weight":187.6},{"date":"2026-01-04","weight":186.2},{"date":"2026-01-05","weight":186.2},{"date":"2026-01-06","weight":187.0},{"date":"2026-01-07","weight":185.6},{"date":"2026-01-09","weight":186.6},{"date":"2026-01-10","weight":187.0},{"date":"2026-01-11","weight":188.2},{"date":"2026-01-12","weight":187.0},{"date":"2026-01-13","weight":188.8},{"date":"2026-01-14","weight":187.2},{"date":"2026-01-15","weight":188.2},{"date":"2026-01-16","weight":191.3},{"date":"2026-01-17","weight":188.2},{"date":"2026-01-18","weight":187.4},{"date":"2026-01-19","weight":188.4},{"date":"2026-01-20","weight":188.6},{"date":"2026-01-21","weight":189.0},{"date":"2026-01-22","weight":190.2},{"date":"2026-01-23","weight":190.6},{"date":"2026-01-24","weight":189.0},{"date":"2026-01-26","weight":189.6},{"date":"2026-01-27","weight":189.0},{"date":"2026-01-28","weight":189.6},{"date":"2026-02-01","weight":191.2},{"date":"2026-02-02","weight":191.0},{"date":"2026-02-03","weight":192.0},{"date":"2026-02-04","weight":191.4},{"date":"2026-02-05","weight":191.0},{"date":"2026-02-09","weight":193.6},{"date":"2026-02-10","weight":189.3},{"date":"2026-02-16","weight":190.0},{"date":"2026-02-17","weight":189.4},{"date":"2026-02-23","weight":193.0},{"date":"2026-02-24","weight":192.6},{"date":"2026-02-25","weight":191.4},{"date":"2026-02-26","weight":194.0},{"date":"2026-02-28","weight":192.0},{"date":"2026-03-01","weight":191.6},{"date":"2026-03-02","weight":191.2},{"date":"2026-03-03","weight":191.6},{"date":"2026-03-04","weight":192.0},{"date":"2026-03-05","weight":190.0},{"date":"2026-03-06","weight":189.2},{"date":"2026-03-07","weight":187.0},{"date":"2026-03-08","weight":190.4}];
-    saveEntries(seed);
-  }
-})();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WEIGHT — Render
@@ -1882,29 +2008,23 @@ function renderWeightView() {
 // WEIGHT — Actions
 // ═══════════════════════════════════════════════════════════════════════════
 
-function logWeight() {
+async function logWeight() {
   const dateVal   = document.getElementById('wInputDate').value;
   const weightVal = parseFloat(document.getElementById('wInputWeight').value);
   if (!dateVal || isNaN(weightVal) || weightVal < 50 || weightVal > 500) {
     showToast('Enter a valid weight!', '#ff6b6b'); return;
   }
-  let entries = getEntries();
-  const existing = entries.findIndex(e => e.date === dateVal);
-  if (existing >= 0) entries[existing].weight = weightVal;
-  else entries.push({ date:dateVal, weight:weightVal });
-  entries.sort((a,b) => a.date.localeCompare(b.date));
-  saveEntries(entries);
-  // Also sync to server if available (with full payload structure)
-  syncFullDataToServer();
-  
-  // Play success sound and show toast with weight value
-  playSuccessSound();
-  document.getElementById('wInputWeight').value = '';
-  showToast(`✅ ${weightVal.toFixed(1)} lbs logged`);
-  
-  // Re-render views
-  renderWeightView();
-  renderLogView();
+  try {
+    await upsertWeightEntry(dateVal, weightVal);
+    playSuccessSound();
+    document.getElementById('wInputWeight').value = '';
+    showToast(`✅ ${weightVal.toFixed(1)} lbs logged`);
+    renderWeightView();
+    renderLogView();
+  } catch(e) {
+    console.error('logWeight error:', e);
+    showToast('Save failed: ' + e.message, '#ff6b6b');
+  }
 }
 
 function setWeightGoal() {
@@ -1916,12 +2036,17 @@ function setWeightGoal() {
   showToast('🎯 Goal set: ' + g + ' lbs');
 }
 
-function deleteWeight(date) {
+async function deleteWeight(date) {
   if (!confirm('Delete entry for ' + formatDate(date) + '?')) return;
-  const entries = getEntries().filter(e => e.date !== date);
-  saveEntries(entries);
-  syncFullDataToServer();
-  renderWeightView();
+  const entry = _weightCache.find(e => e.date === date);
+  if (!entry) { showToast('Entry not found', '#ff6b6b'); return; }
+  try {
+    await deleteWeightById(entry.id);
+    renderWeightView();
+  } catch(e) {
+    console.error('deleteWeight error:', e);
+    showToast('Delete failed: ' + e.message, '#ff6b6b');
+  }
 }
 
 function exportWeightCSV() {
@@ -1940,10 +2065,9 @@ function exportWeightCSV() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function renderLogView() {
-  // Render today's meal list
+  // Render today's meal list from in-memory cache
   const today = todayStr();
-  const logs = getLogs();
-  const todayLogs = logs.filter(l => l.date === today).sort((a,b) => b.time.localeCompare(a.time));
+  const todayLogs = _macroCache.filter(l => l.date === today).sort((a,b) => (b.time||'').localeCompare(a.time||''));
   renderTodayMealList(todayLogs);
   
   const t = getTargets();
@@ -1958,122 +2082,67 @@ async function renderLogView() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SERVER SYNC — Single source of truth: /data.json on localhost server
-// GitHub Pages: localStorage only (no server). Localhost: full server sync.
+// SUPABASE INIT — Load all data from Supabase on startup
 // ═══════════════════════════════════════════════════════════════════════════
 
-const PENDING_SYNC_KEY = 'physiq_pending_sync';
-let _serverAvailable = null; // null=unknown, true=online, false=offline
-
-function isLocalhostEnv() {
-  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-}
-
-function getPendingSync() {
-  try { return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || 'false'); }
-  catch(e) { return false; }
-}
-
-function setPendingSync(val) {
-  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(val));
-}
-
-// Load data from server (single source of truth on localhost).
-// On failure, fall back to localStorage. Handles pending offline entries on reconnect.
-async function loadDataFromServer() {
-  // GitHub Pages: no server — localStorage only
-  if (!isLocalhostEnv()) return;
-
+async function initSupabase() {
   try {
-    const res = await fetch('/data.json?t=' + Date.now(), { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-
-    const wasOffline = _serverAvailable === false;
-    _serverAvailable = true;
-
-    const remoteMacros  = Array.isArray(data.macros)  ? data.macros  : [];
-    const remoteWeights = Array.isArray(data.weights) ? data.weights : [];
-
-    // Merge macros: server is source of truth, local adds any new entries not on server
-    const local = getLogs();
-    const map = new Map();
-    remoteMacros.forEach(e => { if (!isDeleted(e)) map.set(`${e.date}|${e.time}|${e.description}`, e); });
-    local.forEach(e => {
-      if (!isDeleted(e)) {
-        const k = `${e.date}|${e.time}|${e.description}`;
-        if (!map.has(k)) map.set(k, e); // local-only entry (added offline)
-      }
-    });
-    const mergedMacros = Array.from(map.values()).sort((a,b) =>
-      a.date !== b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time)
-    );
-
-    // Merge weights: server is source of truth, local fills gaps
-    const localWeights = getEntries();
-    const wMap = new Map();
-    remoteWeights.forEach(e => wMap.set(e.date, e));
-    localWeights.forEach(e => { if (!wMap.has(e.date)) wMap.set(e.date, e); });
-    const mergedWeights = Array.from(wMap.values()).sort((a,b) => a.date.localeCompare(b.date));
-
-    // Silently update localStorage without triggering a re-POST to server
-    localStorage.setItem(LOGS_KEY, JSON.stringify(mergedMacros));
-    localStorage.setItem(WT_STORE_KEY, JSON.stringify(mergedWeights));
-
-    // If we were offline and had pending entries, push merged data back to server
-    if (wasOffline && getPendingSync()) {
-      console.log('[sync] Back online — pushing pending offline entries to server');
-      setPendingSync(false);
-      await _pushToServer(mergedMacros, mergedWeights);
+    // Test if tables exist
+    const { error: testErr } = await db.from('weight_entries').select('id').limit(1);
+    if (testErr && testErr.code === 'PGRST205') {
+      // Tables don't exist yet — show setup overlay
+      document.getElementById('setupOverlay').style.display = 'block';
+      return;
     }
+    if (testErr) throw testErr;
+    
+    _dbReady = true;
 
-    renderMacrosView();
+    // Load all weights
+    const { data: wData, error: wErr } = await db
+      .from('weight_entries')
+      .select('*')
+      .order('date', { ascending: true });
+    if (wErr) throw wErr;
+    _weightCache = (wData || []).map(dbWeightToApp);
+
+    // Load all macros
+    const { data: mData, error: mErr } = await db
+      .from('macro_entries')
+      .select('*')
+      .order('date', { ascending: true });
+    if (mErr) throw mErr;
+    _macroCache = (mData || []).map(dbMacroToApp);
+
+    console.log(`[supabase] Loaded ${_weightCache.length} weights + ${_macroCache.length} macros`);
+
+    // Migrate any localStorage data (runs once, then sets migration flag)
+    await migrateLocalStorageToSupabase();
+
+    // Render with fresh data
     renderWeightView();
+    renderMacrosView();
     renderLogView().catch(() => {});
 
   } catch(e) {
-    if (_serverAvailable !== false) {
-      console.warn('[sync] Server unreachable — using localStorage (offline mode):', e.message);
-    }
-    _serverAvailable = false;
-    // localStorage already has the data — UI renders from it, no action needed
+    console.error('[supabase] Init error:', e);
+    // Don't crash — show error in header
+    document.getElementById('headerSub').textContent = '⚠️ Sync error';
   }
 }
 
-// Internal: push full payload to server. Returns true on success.
-async function _pushToServer(macros, weights) {
-  const settings = getTargets();
-  const payload = { macros, weights, settings };
+// Re-sync from Supabase (e.g., on tab focus)
+async function refreshFromSupabase() {
+  if (!_dbReady) return;
   try {
-    const res = await fetch('/data.json', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!res.ok) {
-      console.warn('[sync] Server POST failed:', res.status);
-      return false;
-    }
-    const json = await res.json();
-    console.log('[sync] Server saved OK — macros:', (json.macros||[]).length, 'weights:', (json.weights||[]).length);
-    _serverAvailable = true;
-    return true;
+    const { data: wData } = await db.from('weight_entries').select('*').order('date', { ascending: true });
+    const { data: mData } = await db.from('macro_entries').select('*').order('date', { ascending: true });
+    if (wData) _weightCache = wData.map(dbWeightToApp);
+    if (mData) _macroCache  = mData.map(dbMacroToApp);
+    renderWeightView();
+    renderMacrosView();
   } catch(e) {
-    console.warn('[sync] POST to server failed:', e.message);
-    _serverAvailable = false;
-    return false;
-  }
-}
-
-// Sync full data to server. On failure, mark pending for next reconnect.
-async function syncFullDataToServer() {
-  if (!isLocalhostEnv()) return; // GitHub Pages: no server
-  const macros  = getLogs();
-  const weights = getEntries();
-  const ok = await _pushToServer(macros, weights);
-  if (!ok) {
-    setPendingSync(true); // will retry on next successful loadDataFromServer()
+    console.warn('[supabase] Refresh error:', e.message);
   }
 }
 
@@ -2098,14 +2167,16 @@ document.addEventListener('DOMContentLoaded', () => {
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Set today on weight date pickers (wInputDate is in view-weight)
+// Set today on weight date pickers
 document.getElementById('wInputDate').value = todayStr();
 
-// Initial render (from localStorage immediately, then server sync overlays)
+// Render empty state immediately (cache is empty until Supabase loads)
 renderWeightView();
 renderMacrosView();
 renderLogView().catch(e => console.error('Error initializing log view:', e));
-loadDataFromServer(); // fetch from server; merges + re-renders on success
+
+// Load from Supabase
+initSupabase();
 
 // Initialize nav indicator position
 setTimeout(() => {
@@ -2113,12 +2184,9 @@ setTimeout(() => {
   if (activeBtn) updateNavIndicator(activeBtn);
 }, 0);
 
-// Poll server every 30s (localhost only — loadDataFromServer() is a no-op on GitHub Pages)
-setInterval(loadDataFromServer, 30000);
-
 // Re-sync on tab becoming visible
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') loadDataFromServer();
+  if (document.visibilityState === 'visible') refreshFromSupabase();
 });
 
 // Service Worker
