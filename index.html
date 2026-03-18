@@ -2119,6 +2119,11 @@ async function initSupabase() {
     // Migrate any localStorage data (runs once, then sets migration flag)
     await migrateLocalStorageToSupabase();
 
+    // If both tables empty, try seeding from data.json (GitHub Pages hosted backup)
+    if (_weightCache.length === 0 && _macroCache.length === 0) {
+      await seedFromDataJson();
+    }
+
     // Render with fresh data
     renderWeightView();
     renderMacrosView();
@@ -2128,6 +2133,47 @@ async function initSupabase() {
     console.error('[supabase] Init error:', e);
     // Don't crash — show error in header
     document.getElementById('headerSub').textContent = '⚠️ Sync error';
+  }
+}
+
+// Seed from data.json if Supabase tables are empty (one-time historical import)
+async function seedFromDataJson() {
+  const SEED_KEY = 'physiq_seeded_from_datajson_v1';
+  if (localStorage.getItem(SEED_KEY)) return;
+  try {
+    // Try to fetch data.json from the same origin (works on GitHub Pages and localhost)
+    const res = await fetch('/data.json', { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return;
+    const data = await res.json();
+    const weights = Array.isArray(data.weights) ? data.weights : [];
+    const macros  = Array.isArray(data.macros)  ? data.macros  : [];
+    if (!weights.length && !macros.length) return;
+
+    console.log(`[seed] Seeding ${weights.length} weights + ${macros.length} macros from data.json...`);
+
+    if (weights.length) {
+      const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0 }));
+      for (let i = 0; i < rows.length; i += 100) {
+        const { data: d, error: e } = await db.from('weight_entries').insert(rows.slice(i, i+100)).select();
+        if (!e && d) d.forEach(r => _weightCache.push(dbWeightToApp(r)));
+      }
+    }
+    if (macros.length) {
+      const rows = macros.map(e => ({
+        date: e.date, food_name: e.description || '', time_logged: e.time || null,
+        calories: e.calories || 0, protein: e.protein || 0, carbs: e.carbs || 0, fat: e.fat || 0,
+      }));
+      for (let i = 0; i < rows.length; i += 100) {
+        const { data: d, error: e } = await db.from('macro_entries').insert(rows.slice(i, i+100)).select();
+        if (!e && d) d.forEach(r => _macroCache.push(dbMacroToApp(r)));
+      }
+    }
+    _weightCache.sort((a,b) => a.date.localeCompare(b.date));
+    _macroCache.sort((a,b) => a.date.localeCompare(b.date));
+    localStorage.setItem(SEED_KEY, '1');
+    console.log('[seed] Done. Seeded from data.json.');
+  } catch(e) {
+    console.warn('[seed] data.json seed failed (non-critical):', e.message);
   }
 }
 
