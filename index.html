@@ -1555,10 +1555,10 @@ function toggleSettings() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const GEMINI_KEY_LS = 'mt_gemini_key';
-const GEMINI_KEY_HARDCODED = 'AIzaSyBzcMr_IdjDR4RTs3GTwLR0z6Rtu-Dk7O8';
+const GEMINI_KEY_HARDCODED = ''; // key handled server-side via /api/gemini proxy
 async function getGeminiKey() {
-  // Always use hardcoded key — no user input needed
-  return GEMINI_KEY_HARDCODED;
+  // Key is handled server-side — return sentinel value
+  return 'use-proxy';
   
   // (legacy code below kept for reference but never reached)
   let key = localStorage.getItem(GEMINI_KEY_LS) || '';
