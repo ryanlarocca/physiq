@@ -623,9 +623,183 @@
       .macro-inputs { grid-template-columns: 1fr 1fr; }
       .stats-grid { grid-template-columns: 1fr 1fr; }
     }
+
+    /* ── Auth Overlay ────────────────────────────────── */
+    #authOverlay {
+      position: fixed;
+      inset: 0;
+      background: #0f0f0f;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .auth-box {
+      width: 100%;
+      max-width: 380px;
+    }
+    .auth-logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .auth-logo .auth-logo-icon {
+      font-size: 3rem;
+      margin-bottom: 8px;
+      display: block;
+    }
+    .auth-logo h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: #fff;
+    }
+    .auth-logo h1 span { color: #22c55e; }
+    .auth-logo p {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 4px;
+    }
+    .auth-field {
+      margin-bottom: 14px;
+    }
+    .auth-field label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .auth-field input {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 1rem;
+      padding: 14px 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .auth-field input:focus {
+      border-color: #22c55e;
+    }
+    .auth-btn {
+      width: 100%;
+      background: #22c55e;
+      color: #0f0f0f;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 15px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: opacity 0.2s;
+    }
+    .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .auth-btn-secondary {
+      width: 100%;
+      background: transparent;
+      color: #666;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 13px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .auth-btn-secondary:hover { color: #fff; border-color: #444; }
+    .auth-error {
+      color: #ff6b6b;
+      font-size: 0.82rem;
+      margin-top: 10px;
+      text-align: center;
+      min-height: 20px;
+    }
+    .auth-toggle {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 0.82rem;
+      color: #555;
+    }
+    .auth-toggle a {
+      color: #22c55e;
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .auth-forgot {
+      text-align: center;
+      margin-top: 12px;
+    }
+    .auth-forgot a {
+      font-size: 0.78rem;
+      color: #555;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .auth-forgot a:hover { color: #999; }
+
+    /* ── Sign Out btn in settings ────────────────────── */
+    .signout-btn {
+      width: 100%;
+      background: transparent;
+      border: 1px solid #3a1a1a;
+      border-radius: 12px;
+      color: #ff6b6b;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 11px;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: background 0.2s;
+    }
+    .signout-btn:hover { background: rgba(255,107,107,0.08); }
   </style>
 </head>
 <body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     AUTH OVERLAY — shown until user is signed in
+══════════════════════════════════════════════════════════════ -->
+<div id="authOverlay">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <span class="auth-logo-icon">⚡</span>
+      <h1>Phy<span>siq</span></h1>
+      <p>Your AI fitness co-pilot</p>
+    </div>
+
+    <div id="authSignIn">
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="auth-btn" id="authSignInBtn" onclick="authSignIn()">Sign In</button>
+      <button class="auth-btn-secondary" id="authSignUpBtn" onclick="authSignUp()">Create Account</button>
+      <div class="auth-error" id="authError"></div>
+      <div class="auth-forgot">
+        <a onclick="authForgotPassword()">Forgot password?</a>
+      </div>
+      <div class="auth-toggle">
+        New here? <a onclick="authToggleMode()">Create an account</a>
+      </div>
+    </div>
+
+    <div id="authMode" style="display:none">
+      <!-- mode: 'signin' | 'signup' — toggled via JS -->
+    </div>
+  </div>
+</div>
 
 <header>
   <div class="logo">Phy<span>siq</span></div>
@@ -669,6 +843,7 @@
   id bigserial PRIMARY KEY,
   date text NOT NULL,
   weight float NOT NULL,
+  user_id uuid REFERENCES auth.users(id),
   created_at timestamptz DEFAULT now()
 );
 
@@ -681,17 +856,65 @@ CREATE TABLE IF NOT EXISTS macro_entries (
   fat float NOT NULL DEFAULT 0,
   food_name text NOT NULL DEFAULT '',
   time_logged text,
+  user_id uuid REFERENCES auth.users(id),
   created_at timestamptz DEFAULT now()
 );
 
 ALTER TABLE weight_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE macro_entries ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "allow_all_weight" ON weight_entries FOR ALL TO anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_all_macros" ON macro_entries FOR ALL TO anon USING (true) WITH CHECK (true);
+-- Add user_id to existing tables (if already created without it)
+ALTER TABLE weight_entries ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+ALTER TABLE macro_entries ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+
+-- Drop old open policies, add user-scoped policies
+DROP POLICY IF EXISTS "allow_all_weight" ON weight_entries;
+DROP POLICY IF EXISTS "allow_all_macros" ON macro_entries;
+
+CREATE POLICY "user_weight" ON weight_entries FOR ALL TO authenticated
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "user_macros" ON macro_entries FOR ALL TO authenticated
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_weight_date ON weight_entries(date);
-CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_entries(date);</pre>
+CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_entries(date);
+CREATE INDEX IF NOT EXISTS idx_weight_user ON weight_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
+    </div>
+    <a href="https://supabase.com/dashboard/project/msmlqdrfsieixudgsced/sql/new" target="_blank" style="display:block;background:var(--accent);color:white;text-align:center;padding:14px;border-radius:12px;font-weight:700;text-decoration:none;margin-bottom:12px">Open Supabase SQL Editor →</a>
+    <button onclick="location.reload()" style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:12px;font-size:0.9rem;cursor:pointer">Reload after running SQL</button>
+  </div>
+</div>
+
+<!-- DB Migration overlay (shown if user_id column not yet added) -->
+<div id="migrationOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,19,0.97);z-index:9998;overflow-y:auto;padding:24px">
+  <div style="max-width:540px;margin:0 auto;padding-top:40px">
+    <div style="font-size:2rem;margin-bottom:8px">🔐 One-Time Auth Migration</div>
+    <div style="color:var(--muted);margin-bottom:20px;font-size:0.9rem">Almost there! Run this SQL once to enable multi-user data isolation, then reload.</div>
+    <div style="background:var(--card2);border-radius:12px;padding:16px;border:1px solid var(--border);margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:0.8rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.08em">SQL to run</span>
+        <button onclick="copyMigrationSQL()" style="background:var(--accent);border:none;color:white;padding:5px 14px;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer">Copy SQL</button>
+      </div>
+      <pre id="migrationSQL" style="font-size:0.72rem;color:var(--green);white-space:pre-wrap;word-break:break-all;line-height:1.5;max-height:320px;overflow-y:auto">-- Add user_id column to existing tables
+ALTER TABLE weight_entries ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+ALTER TABLE macro_entries ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+
+-- Drop old open policies (allow anon)
+DROP POLICY IF EXISTS "allow_all_weight" ON weight_entries;
+DROP POLICY IF EXISTS "allow_all_macros" ON macro_entries;
+
+-- Create user-scoped policies (authenticated users only see their own data)
+CREATE POLICY "user_weight" ON weight_entries FOR ALL TO authenticated
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "user_macros" ON macro_entries FOR ALL TO authenticated
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Add indexes for performance
+CREATE INDEX IF NOT EXISTS idx_weight_user ON weight_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
     </div>
     <a href="https://supabase.com/dashboard/project/msmlqdrfsieixudgsced/sql/new" target="_blank" style="display:block;background:var(--accent);color:white;text-align:center;padding:14px;border-radius:12px;font-weight:700;text-decoration:none;margin-bottom:12px">Open Supabase SQL Editor →</a>
     <button onclick="location.reload()" style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:12px;font-size:0.9rem;cursor:pointer">Reload after running SQL</button>
@@ -890,8 +1113,7 @@ CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_entries(date);</pre>
       </div>
       <button class="btn-green" onclick="saveGoals()">Save Goals</button>
       <span class="save-confirm" id="saveConfirm">✓ Saved!</span>
-
-      
+      <button class="signout-btn" onclick="authSignOut()">🚪 Sign Out</button>
     </div>
 
   </div><!-- end macros view -->
@@ -1062,6 +1284,11 @@ function copySetupSQL() {
   navigator.clipboard.writeText(sql).then(() => showToast('SQL copied!'));
 }
 
+function copyMigrationSQL() {
+  const sql = document.getElementById('migrationSQL').textContent;
+  navigator.clipboard.writeText(sql).then(() => showToast('SQL copied!'));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MACROS — Storage
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1081,6 +1308,7 @@ function saveTargets(t) { localStorage.setItem(TARGETS_KEY, JSON.stringify(t)); 
 
 async function insertMacroEntry(entry) {
   // entry: {date, time, description, calories, protein, carbs, fat}
+  const user = await db.auth.getUser();
   const row = {
     date: entry.date,
     food_name: entry.description || '',
@@ -1089,6 +1317,7 @@ async function insertMacroEntry(entry) {
     protein:  entry.protein  || 0,
     carbs:    entry.carbs    || 0,
     fat:      entry.fat      || 0,
+    user_id:  user?.data?.user?.id || null,
   };
   const { data, error } = await db.from('macro_entries').insert(row).select().single();
   if (error) throw error;
@@ -1125,6 +1354,8 @@ function dbWeightToApp(row) {
 // ── Supabase Weight Operations ────────────────────────────────────────────
 
 async function upsertWeightEntry(date, weight) {
+  const user = await db.auth.getUser();
+  const userId = user?.data?.user?.id || null;
   // Check if exists in cache
   const existing = _weightCache.find(e => e.date === date);
   if (existing) {
@@ -1133,7 +1364,7 @@ async function upsertWeightEntry(date, weight) {
     existing.weight = weight;
     return data;
   } else {
-    const { data, error } = await db.from('weight_entries').insert({ date, weight }).select().single();
+    const { data, error } = await db.from('weight_entries').insert({ date, weight, user_id: userId }).select().single();
     if (error) throw error;
     _weightCache.push(dbWeightToApp(data));
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
@@ -1170,10 +1401,13 @@ async function migrateLocalStorageToSupabase() {
 
   console.log(`[migrate] Migrating ${oldWeights.length} weights + ${oldMacros.length} macros from localStorage...`);
 
+  const userRes = await db.auth.getUser();
+  const lsUserId = userRes?.data?.user?.id || null;
+
   // Migrate weights in batches
   if (oldWeights.length) {
     const existingDates = new Set(_weightCache.map(e => e.date));
-    const toInsert = oldWeights.filter(e => !existingDates.has(e.date)).map(e => ({ date: e.date, weight: e.weight }));
+    const toInsert = oldWeights.filter(e => !existingDates.has(e.date)).map(e => ({ date: e.date, weight: e.weight, user_id: lsUserId }));
     if (toInsert.length) {
       const { data, error } = await db.from('weight_entries').insert(toInsert).select();
       if (!error && data) {
@@ -1189,6 +1423,7 @@ async function migrateLocalStorageToSupabase() {
     const toInsert = oldMacros.filter(e => !existingKeys.has(`${e.date}|${e.time}|${e.description}`)).map(e => ({
       date: e.date, food_name: e.description || '', time_logged: e.time || null,
       calories: e.calories || 0, protein: e.protein || 0, carbs: e.carbs || 0, fat: e.fat || 0,
+      user_id: lsUserId,
     }));
     if (toInsert.length) {
       // Insert in chunks of 100
@@ -2033,23 +2268,196 @@ async function renderLogView() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// AUTH — Login, Signup, Sign Out
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _authMode = 'signin'; // 'signin' | 'signup'
+
+function authSetError(msg) {
+  document.getElementById('authError').textContent = msg || '';
+}
+
+function authSetLoading(loading) {
+  const btn1 = document.getElementById('authSignInBtn');
+  const btn2 = document.getElementById('authSignUpBtn');
+  if (loading) {
+    btn1.disabled = true; btn1.textContent = '...';
+    btn2.disabled = true;
+  } else {
+    btn1.disabled = false; btn1.textContent = 'Sign In';
+    btn2.disabled = false;
+  }
+}
+
+function authToggleMode() {
+  _authMode = _authMode === 'signin' ? 'signup' : 'signin';
+  const toggleLink = document.querySelector('.auth-toggle');
+  const forgotEl = document.querySelector('.auth-forgot');
+  const btn1 = document.getElementById('authSignInBtn');
+  const btn2 = document.getElementById('authSignUpBtn');
+  if (_authMode === 'signup') {
+    btn1.textContent = 'Create Account';
+    btn1.onclick = authSignUp;
+    btn2.textContent = 'Sign In Instead';
+    btn2.onclick = authSignIn;
+    toggleLink.innerHTML = 'Already have an account? <a onclick="authToggleMode()">Sign in</a>';
+    if (forgotEl) forgotEl.style.display = 'none';
+  } else {
+    btn1.textContent = 'Sign In';
+    btn1.onclick = authSignIn;
+    btn2.textContent = 'Create Account';
+    btn2.onclick = authSignUp;
+    toggleLink.innerHTML = 'New here? <a onclick="authToggleMode()">Create an account</a>';
+    if (forgotEl) forgotEl.style.display = '';
+  }
+  authSetError('');
+  document.getElementById('authPassword').value = '';
+}
+
+async function authSignIn() {
+  const email    = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password) { authSetError('Enter your email and password'); return; }
+  authSetLoading(true); authSetError('');
+  try {
+    const { data, error } = await db.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    // onAuthStateChange handles the rest
+  } catch(e) {
+    authSetError(e.message || 'Sign in failed');
+    authSetLoading(false);
+  }
+}
+
+async function authSignUp() {
+  const email    = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password) { authSetError('Enter your email and password'); return; }
+  if (password.length < 6) { authSetError('Password must be at least 6 characters'); return; }
+  authSetLoading(true); authSetError('');
+  try {
+    const { data, error } = await db.auth.signUp({ email, password });
+    if (error) throw error;
+    if (data?.user && !data?.session) {
+      // Email confirmation required
+      authSetError('');
+      document.getElementById('authSignInBtn').textContent = '✅ Check your email to confirm';
+      document.getElementById('authSignInBtn').disabled = true;
+      document.getElementById('authSignUpBtn').disabled = true;
+    }
+    // If session exists, onAuthStateChange handles the rest
+  } catch(e) {
+    authSetError(e.message || 'Sign up failed');
+    authSetLoading(false);
+  }
+}
+
+async function authForgotPassword() {
+  const email = document.getElementById('authEmail').value.trim();
+  if (!email) { authSetError('Enter your email first'); return; }
+  authSetError('');
+  const { error } = await db.auth.resetPasswordForEmail(email);
+  if (error) { authSetError(error.message); return; }
+  authSetError('');
+  document.getElementById('authSignInBtn').textContent = '✅ Reset email sent!';
+  setTimeout(() => {
+    document.getElementById('authSignInBtn').textContent = 'Sign In';
+  }, 3000);
+}
+
+async function authSignOut() {
+  if (!confirm('Sign out of Physiq?')) return;
+  await db.auth.signOut();
+  // Reload to show auth screen
+  location.reload();
+}
+
+// Migrate unowned data to newly logged-in user (Ryan's existing data)
+async function migrateUnownedData(userId) {
+  const MIGRATED_KEY = `physiq_user_migrated_${userId}`;
+  if (localStorage.getItem(MIGRATED_KEY)) return;
+  try {
+    // Check if there are unowned rows
+    const { data: unownedW } = await db.from('weight_entries').select('id').is('user_id', null).limit(1);
+    const { data: unownedM } = await db.from('macro_entries').select('id').is('user_id', null).limit(1);
+    if ((unownedW && unownedW.length > 0) || (unownedM && unownedM.length > 0)) {
+      console.log('[migrate] Assigning unowned rows to current user...');
+      await db.from('weight_entries').update({ user_id: userId }).is('user_id', null);
+      await db.from('macro_entries').update({ user_id: userId }).is('user_id', null);
+      console.log('[migrate] Done — existing data claimed by user', userId);
+    }
+    localStorage.setItem(MIGRATED_KEY, '1');
+  } catch(e) {
+    console.warn('[migrate] Unowned data migration failed (non-critical):', e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SUPABASE INIT — Load all data from Supabase on startup
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function initSupabase() {
+  // Listen for auth state changes
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      // User is logged in — hide auth overlay, load data
+      document.getElementById('authOverlay').style.display = 'none';
+      await loadAppData(session.user);
+    } else {
+      // Not logged in — show auth overlay, reset state
+      document.getElementById('authOverlay').style.display = 'flex';
+      authSetLoading(false);
+      _dbReady = false;
+      _weightCache = [];
+      _macroCache  = [];
+    }
+  });
+
+  // Check current session (handles page refresh — stays logged in)
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    document.getElementById('authOverlay').style.display = 'none';
+    await loadAppData(session.user);
+  }
+  // If no session, authOverlay stays visible (it's visible by default in HTML)
+}
+
+async function checkDbMigrationNeeded() {
+  // Check if user_id column exists by querying it directly
+  // If it doesn't exist, we get PGRST204 (column not found) or similar
+  const { data, error } = await db.from('weight_entries').select('user_id').limit(1);
+  if (error && (error.code === '42703' || error.message?.includes('user_id'))) {
+    // Column doesn't exist yet
+    return true;
+  }
+  // Also check if authenticated user can actually access data (RLS policy might block)
+  // If data is null/empty and error is RLS-related, migration also needed
+  if (error && error.code === '42501') return true;
+  return false;
+}
+
+async function loadAppData(user) {
   try {
-    // Test if tables exist
+    // Test if tables exist at all
     const { error: testErr } = await db.from('weight_entries').select('id').limit(1);
     if (testErr && testErr.code === 'PGRST205') {
-      // Tables don't exist yet — show setup overlay
       document.getElementById('setupOverlay').style.display = 'block';
       return;
     }
-    if (testErr) throw testErr;
-    
+
+    // Check if DB migration (user_id column + auth RLS) is needed
+    const migrationNeeded = await checkDbMigrationNeeded();
+    if (migrationNeeded) {
+      document.getElementById('migrationOverlay').style.display = 'block';
+      return;
+    }
+
+    // Migrate any unowned data to this user (first-login migration for Ryan's existing data)
+    await migrateUnownedData(user.id);
+
     _dbReady = true;
 
-    // Load all weights
+    // Load all weights for this user (RLS filters by user_id automatically)
     const { data: wData, error: wErr } = await db
       .from('weight_entries')
       .select('*')
@@ -2057,7 +2465,7 @@ async function initSupabase() {
     if (wErr) throw wErr;
     _weightCache = (wData || []).map(dbWeightToApp);
 
-    // Load all macros
+    // Load all macros for this user
     const { data: mData, error: mErr } = await db
       .from('macro_entries')
       .select('*')
@@ -2065,15 +2473,19 @@ async function initSupabase() {
     if (mErr) throw mErr;
     _macroCache = (mData || []).map(dbMacroToApp);
 
-    console.log(`[supabase] Loaded ${_weightCache.length} weights + ${_macroCache.length} macros`);
+    console.log(`[supabase] Loaded ${_weightCache.length} weights + ${_macroCache.length} macros for user ${user.id}`);
 
-    // Migrate any localStorage data (runs once, then sets migration flag)
+    // Migrate any localStorage data (runs once)
     await migrateLocalStorageToSupabase();
 
-    // If both tables empty, try seeding from data.json (GitHub Pages hosted backup)
+    // If both tables empty, try seeding from data.json
     if (_weightCache.length === 0 && _macroCache.length === 0) {
       await seedFromDataJson();
     }
+
+    // Update header with user email
+    const shortEmail = user.email ? user.email.split('@')[0] : '';
+    document.getElementById('headerSub').textContent = shortEmail ? `👤 ${shortEmail}` : 'Synced';
 
     // Render with fresh data
     renderWeightView();
@@ -2082,7 +2494,6 @@ async function initSupabase() {
 
   } catch(e) {
     console.error('[supabase] Init error:', e);
-    // Don't crash — show error in header
     document.getElementById('headerSub').textContent = '⚠️ Sync error';
   }
 }
@@ -2102,8 +2513,10 @@ async function seedFromDataJson() {
 
     console.log(`[seed] Seeding ${weights.length} weights + ${macros.length} macros from data.json...`);
 
+    const userRes = await db.auth.getUser();
+    const seedUserId = userRes?.data?.user?.id || null;
     if (weights.length) {
-      const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0 }));
+      const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0, user_id: seedUserId }));
       for (let i = 0; i < rows.length; i += 100) {
         const { data: d, error: e } = await db.from('weight_entries').insert(rows.slice(i, i+100)).select();
         if (!e && d) d.forEach(r => _weightCache.push(dbWeightToApp(r)));
@@ -2113,6 +2526,7 @@ async function seedFromDataJson() {
       const rows = macros.map(e => ({
         date: e.date, food_name: e.description || '', time_logged: e.time || null,
         calories: e.calories || 0, protein: e.protein || 0, carbs: e.carbs || 0, fat: e.fat || 0,
+        user_id: seedUserId,
       }));
       for (let i = 0; i < rows.length; i += 100) {
         const { data: d, error: e } = await db.from('macro_entries').insert(rows.slice(i, i+100)).select();
@@ -2172,7 +2586,17 @@ renderWeightView();
 renderMacrosView();
 renderLogView().catch(e => console.error('Error initializing log view:', e));
 
-// Load from Supabase
+// Auth keyboard shortcuts
+document.getElementById('authEmail').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('authPassword').focus();
+});
+document.getElementById('authPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (_authMode === 'signup') authSignUp(); else authSignIn();
+  }
+});
+
+// Initialize auth + load data
 initSupabase();
 
 // Initialize nav indicator position
