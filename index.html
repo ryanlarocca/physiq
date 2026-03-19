@@ -765,6 +765,14 @@
 <body>
 
 <!-- ═══════════════════════════════════════════════════════════
+     LOADING OVERLAY — shown during initial session check
+══════════════════════════════════════════════════════════════ -->
+<div id="loadingOverlay" style="display:flex; position:fixed; inset:0; background:#0a0a0a; z-index:9999; align-items:center; justify-content:center; flex-direction:column; gap:16px;">
+  <span style="font-size:2.5rem;">⚡</span>
+  <p style="color:#888; font-size:0.9rem;">Loading...</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
      AUTH OVERLAY — shown until user is signed in
 ══════════════════════════════════════════════════════════════ -->
 <div id="authOverlay">
@@ -1272,7 +1280,38 @@ function updateNavIndicator(activeBtn) {
 
 const SUPABASE_URL = 'https://msmlqdrfsieixudgsced.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zbWxxZHJmc2llaXh1ZGdzY2VkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzUxMTQsImV4cCI6MjA4OTQ1MTExNH0.YFn7AUZlfNerg3o9QtTsk8nE_QOSiz4xFe6vxs9aBA0';
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── Custom persistent session storage (survives browser/app restart) ──
+const customStorageAdapter = {
+  getItem: (key) => {
+    const val = localStorage.getItem(key);
+    console.log(`[auth-persist] getItem('${key}') =`, val ? 'found' : 'empty');
+    return val;
+  },
+  setItem: (key, value) => {
+    console.log(`[auth-persist] setItem('${key}') =`, value ? Math.round(value.length / 100) + '00 bytes' : 'empty');
+    localStorage.setItem(key, value);
+  },
+  removeItem: (key) => {
+    console.log(`[auth-persist] removeItem('${key}')`);
+    localStorage.removeItem(key);
+  }
+};
+
+// Supabase client with persistent session enabled
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    autoRefreshToken: true,          // Auto-refresh before expiry
+    persistSession: true,            // Persist session to storage
+    detectSessionInUrl: true,        // Handle ?code from email links
+    storage: customStorageAdapter,   // Use localStorage directly
+    storageKey: 'sb-physiq-session', // Session storage key
+    flowType: 'implicit',            // For client-side apps
+  },
+  realtime: {
+    broadcast: { self: true },
+  },
+});
 
 // In-memory cache (loaded from Supabase on init, updated on each write)
 let _weightCache = [];   // [{date, weight, id}]
@@ -1300,9 +1339,93 @@ const DEFAULT_TARGETS = { calories: 2500, protein: 180, carbs: 250, fat: 80 };
 // getLogs returns the in-memory cache (sync, for all render functions)
 function getLogs() { return _macroCache; }
 
-// getTargets / saveTargets remain in localStorage (they're settings, not cross-device data)
-function getTargets() { return JSON.parse(localStorage.getItem(TARGETS_KEY) || JSON.stringify(DEFAULT_TARGETS)); }
-function saveTargets(t) { localStorage.setItem(TARGETS_KEY, JSON.stringify(t)); }
+// ── MACRO GOALS: localStorage + Supabase (persistent across devices & sessions) ──
+
+let _goalsSaveInProgress = false;
+
+function getTargets() { 
+  // Read from localStorage (fallback if Supabase fails)
+  return JSON.parse(localStorage.getItem(TARGETS_KEY) || JSON.stringify(DEFAULT_TARGETS)); 
+}
+
+function saveTargets(t) { 
+  // Save to localStorage immediately (instant UX)
+  localStorage.setItem(TARGETS_KEY, JSON.stringify(t)); 
+  // Async save to Supabase (cloud backup + sync across devices)
+  syncGoalsToSupabase(t).catch(e => console.warn('[goals] Supabase sync failed, using localStorage:', e.message));
+}
+
+// Load macro goals from Supabase on app startup (runs after auth)
+async function loadGoalsFromSupabase() {
+  try {
+    const user = await db.auth.getUser();
+    if (!user?.data?.user?.id) return; // Not authenticated
+    
+    const { data, error } = await db
+      .from('user_goals')
+      .select('*')
+      .eq('user_id', user.data.user.id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows (expected for new users)
+    
+    if (data) {
+      const goals = {
+        calories: data.calories || DEFAULT_TARGETS.calories,
+        protein: data.protein || DEFAULT_TARGETS.protein,
+        carbs: data.carbs || DEFAULT_TARGETS.carbs,
+        fat: data.fat || DEFAULT_TARGETS.fat,
+      };
+      localStorage.setItem(TARGETS_KEY, JSON.stringify(goals));
+      console.log('[goals] Loaded from Supabase:', goals);
+      return goals;
+    }
+  } catch (e) {
+    console.warn('[goals] Error loading from Supabase, using localStorage:', e.message);
+  }
+  return null;
+}
+
+// Save macro goals to Supabase (upsert: create if not exists, update if exists)
+async function syncGoalsToSupabase(goals) {
+  if (_goalsSaveInProgress) return; // Debounce
+  _goalsSaveInProgress = true;
+  
+  try {
+    const user = await db.auth.getUser();
+    if (!user?.data?.user?.id) {
+      console.log('[goals] Not authenticated, skipping Supabase sync');
+      _goalsSaveInProgress = false;
+      return;
+    }
+    
+    const row = {
+      user_id: user.data.user.id,
+      calories: goals.calories || DEFAULT_TARGETS.calories,
+      protein: goals.protein || DEFAULT_TARGETS.protein,
+      carbs: goals.carbs || DEFAULT_TARGETS.carbs,
+      fat: goals.fat || DEFAULT_TARGETS.fat,
+      updated_at: new Date().toISOString(),
+    };
+    
+    // Try upsert (insert or update)
+    const { error } = await db
+      .from('user_goals')
+      .upsert(row, { onConflict: 'user_id' })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    console.log('[goals] Saved to Supabase:', row);
+  } catch (e) {
+    console.warn('[goals] Supabase sync error (localStorage is still valid):', e.message);
+  } finally {
+    _goalsSaveInProgress = false;
+  }
+}
+
+// OLD: getTargets / saveTargets remain in localStorage (they're settings, not cross-device data)
+// UPDATED: Now saves to both localStorage (instant) + Supabase (cloud backup)
 
 // ── Supabase Macro Operations ─────────────────────────────────────────────
 
@@ -1767,17 +1890,36 @@ function toggleManual() {
   f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
 
-function saveGoals() {
+async function saveGoals() {
   const t = {
     calories: parseInt(document.getElementById('goalCal').value)     || DEFAULT_TARGETS.calories,
     protein:  parseInt(document.getElementById('goalProtein').value) || DEFAULT_TARGETS.protein,
     carbs:    parseInt(document.getElementById('goalCarbs').value)   || DEFAULT_TARGETS.carbs,
     fat:      parseInt(document.getElementById('goalFat').value)     || DEFAULT_TARGETS.fat,
   };
-  saveTargets(t);
-  renderMacrosView();
+  
+  // Show "Saving..." feedback
   const c = document.getElementById('saveConfirm');
-  c.classList.add('show'); setTimeout(() => c.classList.remove('show'), 2000);
+  c.textContent = 'Saving...';
+  c.classList.add('show');
+  
+  // Save to localStorage (instant)
+  saveTargets(t);
+  
+  // Wait for Supabase sync (with timeout)
+  try {
+    await Promise.race([
+      syncGoalsToSupabase(t),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 3000))
+    ]);
+    c.textContent = 'Saved ✓';
+  } catch (e) {
+    console.warn('Goals saved locally (Supabase sync failed):', e.message);
+    c.textContent = 'Saved (offline)';
+  }
+  
+  renderMacrosView();
+  setTimeout(() => c.classList.remove('show'), 2000);
 }
 
 function toggleSettings() {
@@ -2256,6 +2398,9 @@ async function renderLogView() {
   const todayLogs = _macroCache.filter(l => l.date === today).sort((a,b) => (b.time||'').localeCompare(a.time||''));
   renderTodayMealList(todayLogs);
   
+  // Try loading goals from Supabase first (will sync if on different device)
+  await loadGoalsFromSupabase().catch(() => {});
+  
   const t = getTargets();
   document.getElementById('goalCal').value     = t.calories;
   document.getElementById('goalProtein').value = t.protein;
@@ -2396,30 +2541,78 @@ async function migrateUnownedData(userId) {
 // SUPABASE INIT — Load all data from Supabase on startup
 // ═══════════════════════════════════════════════════════════════════════════
 
+function showLoadingState() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'flex';
+}
+
+function hideLoadingState() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = 'none';
+}
+
 async function initSupabase() {
-  // Listen for auth state changes
+  // Show loading state immediately — prevents blank/auth flash during session restore
+  showLoadingState();
+
+  // Check session FIRST before setting up listener — avoids race condition
+  console.log('[auth] Checking for existing session...');
+  const { data: { session } } = await db.auth.getSession();
+
+  if (session?.user) {
+    // Session found — go straight to app
+    console.log(`[auth] Session found in storage for: ${session.user.email}`);
+    hideLoadingState();
+    document.getElementById('authOverlay').style.display = 'none';
+    await loadAppData(session.user);
+  } else {
+    // No session — show login
+    console.log('[auth] No session in storage, showing login screen');
+    hideLoadingState();
+    document.getElementById('authOverlay').style.display = 'flex';
+  }
+
+  // THEN set up listener for future auth changes (login/logout) — not initial restore
   db.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      // User is logged in — hide auth overlay, load data
+    console.log(`[auth] State changed: event='${event}', user=${session?.user?.id ? 'FOUND' : 'NONE'}`);
+
+    if (event === 'SIGNED_IN' && session?.user) {
+      // User just logged in via the form
+      console.log(`[auth] SIGNED_IN for user: ${session.user.email}`);
       document.getElementById('authOverlay').style.display = 'none';
       await loadAppData(session.user);
-    } else {
-      // Not logged in — show auth overlay, reset state
+    } else if (event === 'SIGNED_OUT') {
+      // Explicit logout
+      console.log('[auth] SIGNED_OUT, showing login screen');
       document.getElementById('authOverlay').style.display = 'flex';
       authSetLoading(false);
       _dbReady = false;
       _weightCache = [];
       _macroCache  = [];
     }
+    // Ignore TOKEN_REFRESHED, INITIAL_SESSION, and other events
   });
+}
 
-  // Check current session (handles page refresh — stays logged in)
-  const { data: { session } } = await db.auth.getSession();
-  if (session?.user) {
-    document.getElementById('authOverlay').style.display = 'none';
-    await loadAppData(session.user);
+// Auto-restore session if browser/tab reopens (called periodically)
+async function ensureSessionAlive() {
+  if (!_dbReady) return; // Only check if we're already logged in
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.user) {
+      console.warn('[auth] Session lost! Attempting refresh...');
+      const { error } = await db.auth.refreshSession();
+      if (error) {
+        console.error('[auth] Session refresh failed:', error.message);
+        // Force re-login
+        location.reload();
+      } else {
+        console.log('[auth] Session refreshed successfully');
+      }
+    }
+  } catch(e) {
+    console.warn('[auth] Session check failed:', e.message);
   }
-  // If no session, authOverlay stays visible (it's visible by default in HTML)
 }
 
 async function loadAppData(user) {
@@ -2595,6 +2788,35 @@ document.addEventListener('visibilitychange', () => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// Keep session alive — check every 5 minutes or on visibility change
+let sessionCheckInterval;
+function startSessionRefresh() {
+  // Check every 5 minutes
+  sessionCheckInterval = setInterval(async () => {
+    const { data: { session } } = await db.auth.getSession();
+    if (session) {
+      console.log('[auth-keep-alive] Session OK, expires in', 
+        Math.round((new Date(session.expires_at * 1000) - Date.now()) / 60000), 'minutes');
+    } else {
+      console.warn('[auth-keep-alive] Session missing! Re-checking...');
+      ensureSessionAlive();
+    }
+  }, 5 * 60 * 1000);
+}
+
+// Start session refresh check when app fully loads
+window.addEventListener('load', () => {
+  setTimeout(startSessionRefresh, 1000);
+});
+
+// Also check when tab becomes visible (mobile app resume, tab switching)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    console.log('[auth] Tab became visible, checking session...');
+    ensureSessionAlive();
+  }
+});
 </script>
 </body>
 </html>
