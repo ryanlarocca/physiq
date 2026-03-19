@@ -2422,20 +2422,6 @@ async function initSupabase() {
   // If no session, authOverlay stays visible (it's visible by default in HTML)
 }
 
-async function checkDbMigrationNeeded() {
-  // Check if user_id column exists by querying it directly
-  // If it doesn't exist, we get PGRST204 (column not found) or similar
-  const { data, error } = await db.from('weight_entries').select('user_id').limit(1);
-  if (error && (error.code === '42703' || error.message?.includes('user_id'))) {
-    // Column doesn't exist yet
-    return true;
-  }
-  // Also check if authenticated user can actually access data (RLS policy might block)
-  // If data is null/empty and error is RLS-related, migration also needed
-  if (error && error.code === '42501') return true;
-  return false;
-}
-
 async function loadAppData(user) {
   try {
     // Test if tables exist at all
@@ -2445,12 +2431,7 @@ async function loadAppData(user) {
       return;
     }
 
-    // Check if DB migration (user_id column + auth RLS) is needed
-    const migrationNeeded = await checkDbMigrationNeeded();
-    if (migrationNeeded) {
-      document.getElementById('migrationOverlay').style.display = 'block';
-      return;
-    }
+    // DB migration (user_id column + RLS) is already complete — no check needed.
 
     // Migrate any unowned data to this user (first-login migration for Ryan's existing data)
     await migrateUnownedData(user.id);
