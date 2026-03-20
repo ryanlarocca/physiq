@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physiq - Track Your Macros with AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0d0d1a 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(20, 20, 40, 0.8);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(108, 99, 255, 0.1);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo img {
+            width: 100px;
+            height: auto;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #ffffff;
+            text-align: center;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        .subheadline {
+            font-size: 16px;
+            color: #b0b0c0;
+            text-align: center;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        input[type="email"],
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(108, 99, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="email"]::placeholder,
+        select option {
+            color: #6b7280;
+        }
+
+        input[type="email"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #6c63ff;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236c63ff' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 12px 16px;
+            background: #6c63ff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 16px;
+        }
+
+        .submit-btn:hover {
+            background: #5a52d5;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(108, 99, 255, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            background: #4a4a7a;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .privacy-text {
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 24px;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #4b5563;
+            border-top: 1px solid rgba(108, 99, 255, 0.1);
+            padding-top: 24px;
+            margin-top: 24px;
+        }
+
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 24px;
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            border-radius: 8px;
+            color: #4caf50;
+        }
+
+        .error-message {
+            display: none;
+            text-align: center;
+            padding: 16px;
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            border-radius: 8px;
+            color: #f44336;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        .form-wrapper {
+            display: none;
+        }
+
+        .form-wrapper.active {
+            display: block;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 24px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .subheadline {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAQDAwQDAwQEAwQFBAQFBgoHBgYGBg0JCggKDw0QEA8NDw4RExgUERIXEg4PFRwVFxkZGxsbEBQdHx0aHxgaGxr/2wBDAQQFBQYFBgwHBwwaEQ8RGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhr/wAARCAMgAyADASIAAhEBAxEB/8QAHQAAAgEFAQEAAAAAAAAAAAAAAAECAwQFBgcICf/EAGAQAAECBAQDBAYHAgoHBAUJCQECAwAEBREGEiExB0FREyJhcQgUMoGRoRUjQlKxwdEzYgkWJENygpLC4fAXU3OistLxJTSDkxg1Y8PTJkRFVHSFou/E/8QAHAEAAQUBAQEAAAAAAAAAAAAAAAECAwQFBgcI/8QARBEAAQMCBAMECAQEBQMDBQAAAQACAwQRBRIhMRNBUQYiYXEUMoGRobHB0RNC4fAHFTNSQ2KCkvEWJHLC0vIXJTSi4v/aAAwDAQACEQMRAD8A8BwQrw73gQiI84lyiMCFK8EIQ4EIvBETvDvAhF4DrtCHeFQlBaGBaHAhRtDEF4LQIQYVodocCEQjDghQowCGYAIEJwQQQtihEEEEKBKiCCCHIRBBBAhEAIhhggKUNyI3bwggggh2i0IQnBB//Z" alt="Physiq Logo">
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="form-wrapper active" id="formWrapper">
+            <h1>Track Your Macros with AI. No More Guessing.</h1>
+            <p class="subheadline">Join the waitlist for early access to Physiq — the AI-powered macro tracker built for people who are serious about their goals.</p>
+
+            <form id="waitlistForm">
+                <div class="form-group">
+                    <input type="email" id="email" placeholder="Your email address" required>
+                </div>
+
+                <div class="form-group">
+                    <select id="struggle" required>
+                        <option value="">What's your biggest struggle with food tracking?</option>
+                        <option value="Counting calories accurately">Counting calories accurately</option>
+                        <option value="Hitting protein goals">Hitting protein goals</option>
+                        <option value="Staying consistent">Staying consistent</option>
+                        <option value="Understanding portion sizes">Understanding portion sizes</option>
+                        <option value="Finding time to log meals">Finding time to log meals</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">Get Early Access</button>
+                <p class="privacy-text">🔒 No spam. Unsubscribe anytime.</p>
+            </form>
+        </div>
+
+        <div class="success-message" id="successMessage">
+            <h2 style="font-size: 20px; margin-bottom: 8px;">🎉 You're on the list!</h2>
+            <p>We'll be in touch with early access details soon.</p>
+        </div>
+
+        <div class="footer">
+            © 2026 Physiq
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://msmlqdrfsieixudgsced.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zbWxxZHJmc2llaXh1ZGdzY2VkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzUxMTQsImV4cCI6MjA4OTQ1MTExNH0.YFn7AUZlfNerg3o9QtTsk8nE_QOSiz4xFe6vxs9aBA0';
+
+        const form = document.getElementById('waitlistForm');
+        const emailInput = document.getElementById('email');
+        const struggleSelect = document.getElementById('struggle');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const formWrapper = document.getElementById('formWrapper');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = emailInput.value.trim();
+            const struggle = struggleSelect.value;
+
+            if (!email || !struggle) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Joining...';
+            errorMessage.style.display = 'none';
+
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/waitlist_signups`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                        'apikey': SUPABASE_ANON_KEY,
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        struggle: struggle,
+                        created_at: new Date().toISOString(),
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to join waitlist');
+                }
+
+                formWrapper.classList.remove('active');
+                successMessage.style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Something went wrong. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Get Early Access';
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
