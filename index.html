@@ -1017,7 +1017,24 @@ CREATE POLICY "user_macros" ON macro_entries FOR ALL TO authenticated
 CREATE INDEX IF NOT EXISTS idx_weight_date ON weight_entries(date);
 CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_entries(date);
 CREATE INDEX IF NOT EXISTS idx_weight_user ON weight_entries(user_id);
-CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
+CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);
+
+-- Quick Add Presets (enables cloud sync of quick-add buttons)
+CREATE TABLE IF NOT EXISTS quick_add_presets (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES auth.users(id),
+  label text NOT NULL,
+  calories numeric DEFAULT 0,
+  protein numeric DEFAULT 0,
+  carbs numeric DEFAULT 0,
+  fat numeric DEFAULT 0,
+  sort_order integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE quick_add_presets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "user_presets" ON quick_add_presets FOR ALL TO authenticated
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+GRANT ALL ON quick_add_presets TO authenticated;</pre>
     </div>
     <a href="https://supabase.com/dashboard/project/msmlqdrfsieixudgsced/sql/new" target="_blank" style="display:block;background:var(--accent);color:white;text-align:center;padding:14px;border-radius:12px;font-weight:700;text-decoration:none;margin-bottom:12px">Open Supabase SQL Editor →</a>
     <button onclick="location.reload()" style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:12px;font-size:0.9rem;cursor:pointer">Reload after running SQL</button>
