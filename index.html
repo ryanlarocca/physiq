@@ -1155,6 +1155,27 @@ CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
       </div>
     </div>
 
+  <!-- Bug Report Button -->
+  <div style="text-align:center; padding: 12px 0 20px; margin-top: 8px;">
+    <button onclick="openBugModal()" style="background:none; border:none; color:#555; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:20px; border:1px solid #333;">
+      🐛 Report a Bug
+    </button>
+  </div>
+
+  <!-- Bug Report Modal -->
+  <div id="bugReportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#1a1a2e; border-radius:16px; padding:24px; width:90%; max-width:400px; margin:auto;">
+      <h3 style="color:#fff; margin:0 0 8px; font-size:18px;">Report a Bug 🐛</h3>
+      <p style="color:#aaa; font-size:13px; margin:0 0 16px;">Help us improve Physiq. Describe what went wrong.</p>
+      <textarea id="bugDescription" placeholder="What happened? What were you trying to do?"
+        style="width:100%; height:120px; background:#0d0d1a; border:1px solid #333; border-radius:8px; color:#fff; padding:12px; font-size:14px; resize:none; box-sizing:border-box; font-family:inherit;"></textarea>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button onclick="closeBugModal()" style="flex:1; padding:12px; background:#2a2a3e; color:#aaa; border:none; border-radius:8px; cursor:pointer; font-size:14px;">Cancel</button>
+        <button onclick="submitBugReport()" style="flex:1; padding:12px; background:#6c63ff; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;">Submit</button>
+      </div>
+    </div>
+  </div>
+
   </div><!-- end weight view -->
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -3239,6 +3260,43 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 })();
+</script>
+<script>
+// ── Bug Report ────────────────────────────────────────
+function openBugModal() {
+  document.getElementById('bugDescription').value = '';
+  const modal = document.getElementById('bugReportModal');
+  modal.style.display = 'flex';
+}
+function closeBugModal() {
+  document.getElementById('bugReportModal').style.display = 'none';
+}
+async function submitBugReport() {
+  const description = document.getElementById('bugDescription').value.trim();
+  if (!description) { alert('Please describe the bug.'); return; }
+  const btn = document.querySelector('#bugReportModal button:last-child');
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  try {
+    const user = (await _supabase.auth.getUser()).data.user;
+    const { error } = await _supabase.from('bug_reports').insert({
+      user_id: user?.id || null,
+      email: user?.email || null,
+      description,
+      app_version: '1.0.0',
+      status: 'open'
+    });
+    if (error) throw error;
+    closeBugModal();
+    alert('Thanks! Bug report submitted 🙏 We\'ll look into it.');
+  } catch(e) {
+    console.error(e);
+    alert('Failed to submit. Please try again.');
+  } finally {
+    btn.textContent = 'Submit';
+    btn.disabled = false;
+  }
+}
 </script>
 <script>
 // Physiq logo (base64 embedded)
