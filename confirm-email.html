@@ -50,34 +50,28 @@
     .button:hover {
       background: #5568d3;
     }
-    #countdown {
+    .loading {
+      display: none;
+      margin-top: 20px;
       color: #667eea;
-      font-weight: 600;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="checkmark">✅</div>
+    <div class="checkmark">✓</div>
     <h1>Email Confirmed!</h1>
     <p>Your email has been verified. You're all set to use Physiq.</p>
-    <p id="redirect-msg">Redirecting in <span id="countdown">3</span>s...</p>
-    <a href="https://ryanlarocca.github.io/physiq/" class="button">Go to Physiq</a>
+    <p id="redirect-msg">Redirecting you to the app...</p>
+    <a href="/physiq/" class="button">Go to Physiq</a>
+    <div class="loading" id="loading">Redirecting in a moment...</div>
   </div>
 
   <script>
-    const APP_URL = 'https://ryanlarocca.github.io/physiq/';
-    let seconds = 3;
-    const countdownEl = document.getElementById('countdown');
-
-    const timer = setInterval(() => {
-      seconds--;
-      countdownEl.textContent = seconds;
-      if (seconds <= 0) {
-        clearInterval(timer);
-        window.location.replace(APP_URL);
-      }
-    }, 1000);
+    // Auto-redirect to main app after 2 seconds
+    setTimeout(() => {
+      window.location.href = '/physiq/';
+    }, 2000);
   </script>
 </body>
 </html>
