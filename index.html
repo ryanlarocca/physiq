@@ -1210,6 +1210,7 @@ CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
         <input type="text" id="aiSearchInput" placeholder="e.g. 2 eggs + toast, 400g chicken breast" autocomplete="off" onkeydown="if(event.key==='Enter') aiLogMeal()">
         <button class="ai-photo-btn" onclick="document.getElementById('photoInput').click()" title="Log from photo">📷</button>
         <button class="ai-log-btn" onclick="aiLogMeal()" id="aiLogBtn">Log</button>
+        <button class="ai-log-btn" onclick="refreshAppSession()" id="refreshBtn" style="background:#666;" title="Refresh session">🔄</button>
       </div>
       <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelected(this)">
       <!-- Photo preview -->
@@ -3057,6 +3058,25 @@ async function ensureSessionAlive() {
     }
   } catch(e) {
     console.warn('[auth] Session check failed:', e.message);
+  }
+}
+
+// Manual refresh button (user-triggered)
+async function refreshAppSession() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    await ensureSessionAlive();
+    await renderMacrosView(); // Reload macro data
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = '🔄'; btn.disabled = false; }, 1500);
+    showToast('✓ Session refreshed');
+  } catch(e) {
+    console.error('[refresh] Failed:', e.message);
+    btn.textContent = '❌';
+    setTimeout(() => { btn.textContent = '🔄'; btn.disabled = false; }, 1500);
+    showToast('❌ Refresh failed');
   }
 }
 
