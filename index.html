@@ -3023,6 +3023,20 @@ async function initSupabase() {
 
   // Keep session alive with periodic refresh (every 5 min)
   setInterval(ensureSessionAlive, 5 * 60 * 1000);
+
+  // On mobile: detect when tab regains focus and reconnect
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      console.log('[app] Tab regained focus, checking session...');
+      await ensureSessionAlive();
+    }
+  });
+
+  // Also handle when browser window regains focus
+  window.addEventListener('focus', async () => {
+    console.log('[app] Window gained focus, checking session...');
+    await ensureSessionAlive();
+  });
 }
 
 // Auto-restore session if browser/tab reopens (called periodically)
