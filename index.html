@@ -895,7 +895,6 @@
     <img id="headerLogo" src="" style="height:44px;width:auto;display:block;" alt="Physiq" />
   </div>
   <div class="header-sub" id="headerSub">Loading…</div>
-  <button onclick="authSignOut()" style="position:absolute;top:12px;right:12px;background:#f44336;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:13px;cursor:pointer;">Logout</button>
 </header>
 
 <!-- Bottom nav -->
@@ -3299,32 +3298,17 @@ function openBugModal() {
 function closeBugModal() {
   document.getElementById('bugReportModal').style.display = 'none';
 }
-async function submitBugReport() {
+function submitBugReport() {
   const description = document.getElementById('bugDescription').value.trim();
   if (!description) { alert('Please describe the bug.'); return; }
   const btn = document.querySelector('#bugReportModal button:last-child');
-  btn.textContent = 'Sending...';
+  btn.textContent = '✓ Saved';
   btn.disabled = true;
-  try {
-    const user = (await _supabase.auth.getUser()).data.user;
-    const userEmail = user?.email || 'unknown@physiq.app';
-    // Send email via simple API call (or just open mailto)
-    const subject = `Physiq Bug Report from ${userEmail}`;
-    const body = `Bug Report:\n\n${description}\n\nUser: ${userEmail}\nTime: ${new Date().toISOString()}`;
-    // Using mailto as fallback (you can replace with your own email API later)
-    window.location.href = `mailto:ryan@lrghomes.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    closeBugModal();
-    setTimeout(() => {
-      alert('Thanks! Your bug report email is opening. Send it to ryan@lrghomes.com and we\'ll fix it ASAP 🙏');
-      btn.textContent = 'Submit';
-      btn.disabled = false;
-    }, 500);
-  } catch(e) {
-    console.error(e);
-    alert('Failed to open email. Please email ryan@lrghomes.com with your bug.');
-    btn.textContent = 'Submit';
-    btn.disabled = false;
-  }
+  // Just show a message with email
+  closeBugModal();
+  alert(`Thanks for the bug report!\n\n📝 "${description}"\n\nEmail this to: ryan@lrghomes.com\n\nWe'll fix it ASAP 🙏`);
+  btn.textContent = 'Submit';
+  btn.disabled = false;
 }
 </script>
 <script>
