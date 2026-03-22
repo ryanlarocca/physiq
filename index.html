@@ -3020,6 +3020,9 @@ async function initSupabase() {
     }
     // Ignore TOKEN_REFRESHED, INITIAL_SESSION, and other events
   });
+
+  // Keep session alive with periodic refresh (every 5 min)
+  setInterval(ensureSessionAlive, 5 * 60 * 1000);
 }
 
 // Auto-restore session if browser/tab reopens (called periodically)
