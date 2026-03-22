@@ -3061,23 +3061,13 @@ async function ensureSessionAlive() {
   }
 }
 
-// Manual refresh button (user-triggered)
-async function refreshAppSession() {
+// Manual refresh button (user-triggered) - Full page reload
+function refreshAppSession() {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
   btn.textContent = '⏳';
-  try {
-    await ensureSessionAlive();
-    await renderMacrosView(); // Reload macro data
-    btn.textContent = '✓';
-    setTimeout(() => { btn.textContent = '🔄'; btn.disabled = false; }, 1500);
-    showToast('✓ Session refreshed');
-  } catch(e) {
-    console.error('[refresh] Failed:', e.message);
-    btn.textContent = '❌';
-    setTimeout(() => { btn.textContent = '🔄'; btn.disabled = false; }, 1500);
-    showToast('❌ Refresh failed');
-  }
+  // Hard refresh: bypass cache and reload the entire page
+  window.location.reload(true);
 }
 
 async function loadAppData(user) {
