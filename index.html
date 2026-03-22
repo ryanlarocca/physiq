@@ -3306,21 +3306,30 @@ async function submitBugReport() {
   btn.disabled = true;
   try {
     const user = (await _supabase.auth.getUser()).data.user;
+    const userEmail = user?.email || 'unknown@physiq.app';
+    
+    console.log('[submitBugReport] Submitting:', { description, userEmail });
+    
     const res = await fetch('https://physiq-api.vercel.app/api/submit-bug', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         description,
-        userEmail: user?.email || 'unknown@physiq.app'
+        userEmail
       })
     });
+    
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    console.log('[submitBugReport] Response:', data);
+    
+    if (!res.ok) throw new Error(data.error || 'Failed to submit');
+    
     closeBugModal();
-    showToast('✓ Bug report sent. Thanks for helping us improve!');
+    showToast('✓ Bug report submitted! Ryan will review it soon.');
+    document.getElementById('bugDescription').value = '';
   } catch(e) {
-    console.error('[bug] Error:', e.message);
-    showToast('❌ Failed to send. Please try again.');
+    console.error('[submitBugReport] Error:', e.message);
+    showToast('❌ ' + (e.message || 'Failed to send. Please try again.'));
   } finally {
     btn.textContent = 'Submit';
     btn.disabled = false;
