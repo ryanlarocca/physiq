@@ -3298,17 +3298,33 @@ function openBugModal() {
 function closeBugModal() {
   document.getElementById('bugReportModal').style.display = 'none';
 }
-function submitBugReport() {
+async function submitBugReport() {
   const description = document.getElementById('bugDescription').value.trim();
   if (!description) { alert('Please describe the bug.'); return; }
   const btn = document.querySelector('#bugReportModal button:last-child');
-  btn.textContent = '✓ Saved';
+  btn.textContent = '⏳ Sending...';
   btn.disabled = true;
-  // Just show a message with email
-  closeBugModal();
-  alert(`Thanks for the bug report!\n\n📝 "${description}"\n\nEmail this to: ryan@lrghomes.com\n\nWe'll fix it ASAP 🙏`);
-  btn.textContent = 'Submit';
-  btn.disabled = false;
+  try {
+    const user = (await _supabase.auth.getUser()).data.user;
+    const res = await fetch('https://physiq-api.vercel.app/api/submit-bug', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description,
+        userEmail: user?.email || 'unknown@physiq.app'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    closeBugModal();
+    showToast('✓ Bug report sent. Thanks for helping us improve!');
+  } catch(e) {
+    console.error('[bug] Error:', e.message);
+    showToast('❌ Failed to send. Please try again.');
+  } finally {
+    btn.textContent = 'Submit';
+    btn.disabled = false;
+  }
 }
 </script>
 <script>
