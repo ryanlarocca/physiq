@@ -2146,16 +2146,23 @@ function renderQuickAddButtons(presets) {
     };
 
     btn.addEventListener('touchstart', startPress, { passive: true });
-    btn.addEventListener('touchend', (e) => { endPress(); tapPress(e); });
+    btn.addEventListener('touchend', (e) => {
+      e.preventDefault(); // prevent synthesized mouseup from firing tapPreset a second time
+      endPress();
+      tapPress(e);
+    });
     btn.addEventListener('touchcancel', endPress);
-    // Desktop support
+    // Desktop support (only fires on non-touch devices)
     btn.addEventListener('mousedown', startPress);
     btn.addEventListener('mouseup', (e) => { endPress(); tapPress(e); });
     btn.addEventListener('mouseleave', endPress);
   });
 }
 
+let _tapPresetInFlight = false;
 async function tapPreset(preset) {
+  if (_tapPresetInFlight) return; // guard against double-fire (touch+mouse events)
+  _tapPresetInFlight = true;
   try {
     await insertMacroEntry({
       date: todayStr(), time: nowTime12(),
@@ -2173,6 +2180,9 @@ async function tapPreset(preset) {
   } catch(e) {
     console.error('tapPreset error:', e);
     showToast('Save failed: ' + e.message, '#ff6b6b');
+  } finally {
+    // Reset after a short delay so rapid taps on *different* buttons still work
+    setTimeout(() => { _tapPresetInFlight = false; }, 500);
   }
 }
 
