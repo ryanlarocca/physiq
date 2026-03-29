@@ -3115,11 +3115,7 @@ async function initSupabase() {
     }
   });
 
-  // Also handle when browser window regains focus
-  window.addEventListener('focus', async () => {
-    console.log('[app] Window gained focus, checking session...');
-    await ensureSessionAlive();
-  });
+  // Note: window.focus removed — visibilitychange covers focus on mobile
 }
 
 // Auto-restore session if browser/tab reopens (called periodically)
@@ -3256,8 +3252,12 @@ async function seedFromDataJson() {
 }
 
 // Re-sync from Supabase (e.g., on tab focus)
+let _lastSyncMs = 0;
 async function refreshFromSupabase() {
   if (!_dbReady) return;
+  const now = Date.now();
+  if (now - _lastSyncMs < 2 * 60 * 1000) return; // skip if synced < 2 min ago
+  _lastSyncMs = now;
   try {
     const { data: wData } = await db.from('weight_entries').select('*').order('date', { ascending: true });
     const { data: mData } = await db.from('macro_entries').select('*').order('date', { ascending: true });
