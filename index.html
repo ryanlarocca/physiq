@@ -2102,9 +2102,104 @@ async function seedDefaultPresetsSupabase(defaults) {
   }
 }
 
+// Single set of delegation state — lives outside renderQuickAddButtons so it
+// is only ever attached once to the grid container.
+let _quickAddDelegationAttached = false;
+let _qaPressByMap = {}; // keyed by preset id: { pressTimer, didLongPress, startX, startY, activeBtn }
+
+function _attachQuickAddDelegation(grid) {
+  if (_quickAddDelegationAttached) return;
+  _quickAddDelegationAttached = true;
+
+  const getPresetFromTarget = (target) => {
+    const btn = target.closest('[data-preset-id]');
+    if (!btn) return null;
+    const id = btn.dataset.presetId;
+    const preset = _presets.find(p => String(p.id) === String(id));
+    return preset ? { btn, preset } : null;
+  };
+
+  const startPress = (btn, preset, clientX, clientY) => {
+    const id = String(preset.id);
+    if (_qaPressByMap[id]?.pressTimer) clearTimeout(_qaPressByMap[id].pressTimer);
+    btn.classList.add('pressing');
+    const pressTimer = setTimeout(() => {
+      _qaPressByMap[id].didLongPress = true;
+      btn.classList.remove('pressing');
+      openEditPresetModal(preset);
+    }, 500);
+    _qaPressByMap[id] = { pressTimer, didLongPress: false, startX: clientX, startY: clientY, activeBtn: btn };
+  };
+
+  const endPress = (id) => {
+    const state = _qaPressByMap[id];
+    if (!state) return;
+    clearTimeout(state.pressTimer);
+    state.activeBtn.classList.remove('pressing');
+  };
+
+  // Touch events
+  grid.addEventListener('touchstart', (e) => {
+    const hit = getPresetFromTarget(e.target);
+    if (!hit) return;
+    const t = e.changedTouches[0];
+    startPress(hit.btn, hit.preset, t.pageX, t.pageY);
+  }, { passive: true });
+
+  grid.addEventListener('touchend', (e) => {
+    const hit = getPresetFromTarget(e.target);
+    if (!hit) return;
+    e.preventDefault(); // block synthesized mouse events
+    const id = String(hit.preset.id);
+    const state = _qaPressByMap[id];
+    endPress(id);
+    if (state && !state.didLongPress) {
+      const t = e.changedTouches[0];
+      const dx = t.pageX - state.startX;
+      const dy = t.pageY - state.startY;
+      if (Math.sqrt(dx * dx + dy * dy) <= 10) {
+        tapPreset(hit.preset);
+      }
+    }
+  });
+
+  grid.addEventListener('touchcancel', (e) => {
+    const hit = getPresetFromTarget(e.target);
+    if (!hit) return;
+    endPress(String(hit.preset.id));
+  });
+
+  // Mouse events (desktop)
+  grid.addEventListener('mousedown', (e) => {
+    const hit = getPresetFromTarget(e.target);
+    if (!hit) return;
+    startPress(hit.btn, hit.preset, e.pageX, e.pageY);
+  });
+
+  grid.addEventListener('mouseup', (e) => {
+    const hit = getPresetFromTarget(e.target);
+    if (!hit) return;
+    const id = String(hit.preset.id);
+    const state = _qaPressByMap[id];
+    endPress(id);
+    if (state && !state.didLongPress) {
+      tapPreset(hit.preset);
+    }
+  });
+
+  grid.addEventListener('mouseleave', (e) => {
+    // Cancel any in-progress press when mouse leaves the whole grid
+    Object.keys(_qaPressByMap).forEach(id => endPress(id));
+  });
+}
+
 function renderQuickAddButtons(presets) {
   const grid = document.getElementById('quickAddGrid');
   if (!grid) return;
+
+  // Attach delegation listeners once — subsequent calls just re-render HTML
+  _attachQuickAddDelegation(grid);
+
   if (!presets || presets.length === 0) {
     grid.innerHTML = `<button class="fav-btn" onclick="openNewPresetModal()" style="grid-column:1/-1;color:var(--accent);border-color:var(--accent)">+ Add Quick Add</button>`;
     return;
@@ -2116,47 +2211,6 @@ function renderQuickAddButtons(presets) {
       <div class="fav-macros">${p.calories} cal · ${p.protein}p · ${p.carbs}c · ${p.fat}f</div>
     </button>
   `).join('') + `<button class="fav-btn" onclick="openNewPresetModal()" style="border-style:dashed;color:var(--muted)">+ Add</button>`;
-
-  // Attach tap + long-press handlers
-  presets.forEach(p => {
-    const btn = document.getElementById('preset_' + p.id);
-    if (!btn) return;
-    let pressTimer = null;
-    let didLongPress = false;
-
-    const startPress = () => {
-      didLongPress = false;
-      btn.classList.add('pressing');
-      pressTimer = setTimeout(() => {
-        didLongPress = true;
-        btn.classList.remove('pressing');
-        openEditPresetModal(p);
-      }, 500);
-    };
-
-    const endPress = () => {
-      clearTimeout(pressTimer);
-      btn.classList.remove('pressing');
-    };
-
-    const tapPress = (e) => {
-      if (!didLongPress) {
-        tapPreset(p);
-      }
-    };
-
-    btn.addEventListener('touchstart', startPress, { passive: true });
-    btn.addEventListener('touchend', (e) => {
-      e.preventDefault(); // prevent synthesized mouseup from firing tapPreset a second time
-      endPress();
-      tapPress(e);
-    });
-    btn.addEventListener('touchcancel', endPress);
-    // Desktop support (only fires on non-touch devices)
-    btn.addEventListener('mousedown', startPress);
-    btn.addEventListener('mouseup', (e) => { endPress(); tapPress(e); });
-    btn.addEventListener('mouseleave', endPress);
-  });
 }
 
 let _tapPresetInFlight = false;
@@ -2416,13 +2470,17 @@ async function aiLogMeal() {
   const btn = document.getElementById('aiLogBtn');
   btn.disabled = true; btn.textContent = '...';
   document.getElementById('aiStatus').textContent = '🤖 Parsing macros...';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     let parsed;
     // Call Vercel proxy (keeps API key server-side, never exposed in public code)
     const res = await fetch('https://physiq-api.vercel.app/api/parse-meal', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'API error');
     parsed = data;
@@ -2435,7 +2493,9 @@ async function aiLogMeal() {
     showToast(`✅ ${shortDesc} — ${parsed.calories} cal`);
     renderMacrosView();
   } catch(e) {
-    document.getElementById('aiStatus').textContent = `❌ ${e.message}`;
+    clearTimeout(timeout);
+    const msg = e.name === 'AbortError' ? 'Timed out — try again' : e.message;
+    document.getElementById('aiStatus').textContent = `❌ ${msg}`;
   } finally {
     btn.disabled = false; btn.textContent = 'Log';
   }
@@ -2923,11 +2983,23 @@ async function authSignUp() {
     const { data, error } = await db.auth.signUp({ email, password });
     if (error) throw error;
     if (data?.user && !data?.session) {
-      // Email confirmation required
+      // Email confirmation required — disable buttons and wait for confirmation
       authSetError('');
       document.getElementById('authSignInBtn').textContent = '✅ Check your email to confirm';
       document.getElementById('authSignInBtn').disabled = true;
       document.getElementById('authSignUpBtn').disabled = true;
+      // Re-enable the UI if the user confirms their email and the session becomes active.
+      // Without this, the buttons stay disabled forever on return.
+      const { data: { subscription } } = db.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          subscription.unsubscribe();
+          authSetLoading(false);
+          // The global onAuthStateChange in initSupabase will handle showing the app.
+        } else if (event === 'SIGNED_OUT') {
+          subscription.unsubscribe();
+          authSetLoading(false);
+        }
+      });
     }
     // If session exists, onAuthStateChange handles the rest
   } catch(e) {
@@ -3258,34 +3330,10 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-// Keep session alive — check every 5 minutes or on visibility change
-let sessionCheckInterval;
-function startSessionRefresh() {
-  // Check every 5 minutes
-  sessionCheckInterval = setInterval(async () => {
-    const { data: { session } } = await db.auth.getSession();
-    if (session) {
-      console.log('[auth-keep-alive] Session OK, expires in', 
-        Math.round((new Date(session.expires_at * 1000) - Date.now()) / 60000), 'minutes');
-    } else {
-      console.warn('[auth-keep-alive] Session missing! Re-checking...');
-      ensureSessionAlive();
-    }
-  }, 5 * 60 * 1000);
-}
-
-// Start session refresh check when app fully loads
-window.addEventListener('load', () => {
-  setTimeout(startSessionRefresh, 1000);
-});
-
-// Also check when tab becomes visible (mobile app resume, tab switching)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    console.log('[auth] Tab became visible, checking session...');
-    ensureSessionAlive();
-  }
-});
+// NOTE: Session keep-alive interval and visibilitychange handler are already
+// set up inside initSupabase() (lines ~3035-3044). The duplicate setInterval
+// and duplicate visibilitychange listeners that were here have been removed
+// to prevent multiple overlapping timers and redundant session checks.
 
 // ── Logo setup ───────────────────────────────────────
 (function() {
