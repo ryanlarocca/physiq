@@ -1,6 +1,6 @@
 // Physiq — Service Worker with cache versioning (Safari PWA fix)
 // Version string for cache busting
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `physiq-${CACHE_VERSION}`;
 
 // Cache strategy: stale-while-revalidate for assets, network-first for API/data
@@ -51,17 +51,19 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // HTML: network-first (always check for updates)
+  // HTML: cache-first with background revalidation (stale-while-revalidate)
+  // Loads instantly from cache on every open; fetches update silently for next time.
   if (request.destination === 'document' || url.pathname.endsWith('.html')) {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response.status === 200) {
-            caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
+      caches.open(CACHE_NAME).then(cache => {
+        return cache.match(request).then(cached => {
+          const networkFetch = fetch(request).then(response => {
+            if (response.status === 200) cache.put(request, response.clone());
+            return response;
+          }).catch(() => {});
+          return cached || networkFetch;
+        });
+      })
     );
     return;
   }
