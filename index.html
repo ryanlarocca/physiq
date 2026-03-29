@@ -1488,6 +1488,7 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 let _weightCache = [];   // [{date, weight, id}]
 let _macroCache  = [];   // [{date, time_logged, food_name, calories, protein, carbs, fat, id}]
 let _dbReady = false;    // true once Supabase tables confirmed to exist
+let _currentUserId = null; // cached after login — avoids getUser() network calls on every insert
 
 function copySetupSQL() {
   const sql = document.getElementById('setupSQL').textContent;
@@ -1529,13 +1530,12 @@ function saveTargets(t) {
 // Load macro goals from Supabase on app startup (runs after auth)
 async function loadGoalsFromSupabase() {
   try {
-    const user = await db.auth.getUser();
-    if (!user?.data?.user?.id) return; // Not authenticated
-    
+    if (!_currentUserId) return; // Not authenticated
+
     const { data, error } = await db
       .from('user_goals')
       .select('*')
-      .eq('user_id', user.data.user.id)
+      .eq('user_id', _currentUserId)
       .single();
     
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows (expected for new users)
@@ -1563,15 +1563,14 @@ async function syncGoalsToSupabase(goals) {
   _goalsSaveInProgress = true;
   
   try {
-    const user = await db.auth.getUser();
-    if (!user?.data?.user?.id) {
+    if (!_currentUserId) {
       console.log('[goals] Not authenticated, skipping Supabase sync');
       _goalsSaveInProgress = false;
       return;
     }
-    
+
     const row = {
-      user_id: user.data.user.id,
+      user_id: _currentUserId,
       calories: goals.calories || DEFAULT_TARGETS.calories,
       protein: goals.protein || DEFAULT_TARGETS.protein,
       carbs: goals.carbs || DEFAULT_TARGETS.carbs,
@@ -1602,7 +1601,6 @@ async function syncGoalsToSupabase(goals) {
 
 async function insertMacroEntry(entry) {
   // entry: {date, time, description, calories, protein, carbs, fat}
-  const user = await db.auth.getUser();
   const row = {
     date: entry.date,
     food_name: entry.description || '',
@@ -1611,7 +1609,7 @@ async function insertMacroEntry(entry) {
     protein:  entry.protein  || 0,
     carbs:    entry.carbs    || 0,
     fat:      entry.fat      || 0,
-    user_id:  user?.data?.user?.id || null,
+    user_id:  _currentUserId,
   };
   const { data, error } = await db.from('macro_entries').insert(row).select().single();
   if (error) throw error;
@@ -1648,8 +1646,6 @@ function dbWeightToApp(row) {
 // ── Supabase Weight Operations ────────────────────────────────────────────
 
 async function upsertWeightEntry(date, weight) {
-  const user = await db.auth.getUser();
-  const userId = user?.data?.user?.id || null;
   // Check if exists in cache
   const existing = _weightCache.find(e => e.date === date);
   if (existing) {
@@ -1658,7 +1654,7 @@ async function upsertWeightEntry(date, weight) {
     existing.weight = weight;
     return data;
   } else {
-    const { data, error } = await db.from('weight_entries').insert({ date, weight, user_id: userId }).select().single();
+    const { data, error } = await db.from('weight_entries').insert({ date, weight, user_id: _currentUserId }).select().single();
     if (error) throw error;
     _weightCache.push(dbWeightToApp(data));
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
@@ -1695,8 +1691,7 @@ async function migrateLocalStorageToSupabase() {
 
   console.log(`[migrate] Migrating ${oldWeights.length} weights + ${oldMacros.length} macros from localStorage...`);
 
-  const userRes = await db.auth.getUser();
-  const lsUserId = userRes?.data?.user?.id || null;
+  const lsUserId = _currentUserId;
 
   // Migrate weights in batches
   if (oldWeights.length) {
@@ -2086,10 +2081,9 @@ async function loadQuickAddPresets() {
 
 async function seedDefaultPresetsSupabase(defaults) {
   try {
-    const userId = (await db.auth.getUser()).data?.user?.id;
-    if (!userId) return;
+    if (!_currentUserId) return;
     const rows = defaults.map(p => ({
-      user_id: userId, label: p.label, calories: p.calories,
+      user_id: _currentUserId, label: p.label, calories: p.calories,
       protein: p.protein, carbs: p.carbs, fat: p.fat, sort_order: p.sort_order
     }));
     const { data, error } = await db.from('quick_add_presets').insert(rows).select();
@@ -2301,10 +2295,9 @@ async function savePreset() {
     presetsToLS(_presets);
     if (_dbReady) {
       try {
-        const userId = (await db.auth.getUser()).data?.user?.id;
-        if (userId) {
+        if (_currentUserId) {
           const { data, error } = await db.from('quick_add_presets')
-            .insert({ user_id: userId, label, calories, protein, carbs, fat, sort_order })
+            .insert({ user_id: _currentUserId, label, calories, protein, carbs, fat, sort_order })
             .select().single();
           if (!error && data) {
             newPreset.id = data.id;
@@ -3073,6 +3066,7 @@ async function initSupabase() {
   if (session?.user) {
     // Session found — go straight to app
     console.log(`[auth] Session found in storage for: ${session.user.email}`);
+    _currentUserId = session.user.id;
     hideLoadingState();
     document.getElementById('authOverlay').style.display = 'none';
     await loadAppData(session.user);
@@ -3090,6 +3084,7 @@ async function initSupabase() {
     if (event === 'SIGNED_IN' && session?.user) {
       // User just logged in via the form
       console.log(`[auth] SIGNED_IN for user: ${session.user.email}`);
+      _currentUserId = session.user.id;
       document.getElementById('authOverlay').style.display = 'none';
       await loadAppData(session.user);
     } else if (event === 'SIGNED_OUT') {
@@ -3097,6 +3092,7 @@ async function initSupabase() {
       console.log('[auth] SIGNED_OUT, showing login screen');
       document.getElementById('authOverlay').style.display = 'flex';
       authSetLoading(false);
+      _currentUserId = null;
       _dbReady = false;
       _weightCache = [];
       _macroCache  = [];
@@ -3222,10 +3218,8 @@ async function seedFromDataJson() {
 
     console.log(`[seed] Seeding ${weights.length} weights + ${macros.length} macros from data.json...`);
 
-    const userRes = await db.auth.getUser();
-    const seedUserId = userRes?.data?.user?.id || null;
     if (weights.length) {
-      const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0, user_id: seedUserId }));
+      const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0, user_id: _currentUserId }));
       for (let i = 0; i < rows.length; i += 100) {
         const { data: d, error: e } = await db.from('weight_entries').insert(rows.slice(i, i+100)).select();
         if (!e && d) d.forEach(r => _weightCache.push(dbWeightToApp(r)));
@@ -3235,7 +3229,7 @@ async function seedFromDataJson() {
       const rows = macros.map(e => ({
         date: e.date, food_name: e.description || '', time_logged: e.time || null,
         calories: e.calories || 0, protein: e.protein || 0, carbs: e.carbs || 0, fat: e.fat || 0,
-        user_id: seedUserId,
+        user_id: _currentUserId,
       }));
       for (let i = 0; i < rows.length; i += 100) {
         const { data: d, error: e } = await db.from('macro_entries').insert(rows.slice(i, i+100)).select();
@@ -3363,8 +3357,7 @@ async function submitBugReport() {
   btn.textContent = '⏳ Sending...';
   btn.disabled = true;
   try {
-    const user = (await db.auth.getUser()).data.user;
-    const userEmail = user?.email || 'unknown@physiq.app';
+    const userEmail = 'unknown@physiq.app';
     
     console.log('[submitBugReport] Submitting:', { description, userEmail });
     
