@@ -3124,15 +3124,33 @@ async function ensureSessionAlive() {
       const { error } = await db.auth.refreshSession();
       if (error) {
         console.error('[auth] Session refresh failed:', error.message);
-        // Force re-login
-        location.reload();
+        // Show non-blocking banner instead of reloading — reload was causing the app to freeze/restart unexpectedly
+        showSessionBanner();
       } else {
         console.log('[auth] Session refreshed successfully');
+        hideSessionBanner();
       }
     }
   } catch(e) {
     console.warn('[auth] Session check failed:', e.message);
   }
+}
+
+function showSessionBanner() {
+  let banner = document.getElementById('sessionBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'sessionBanner';
+    banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ff6b6b;color:#fff;text-align:center;padding:10px;z-index:9999;font-size:14px;';
+    banner.innerHTML = 'Session expired. <button onclick="window.location.reload()" style="background:#fff;color:#ff6b6b;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:bold;">Tap to reconnect</button>';
+    document.body.appendChild(banner);
+  }
+  banner.style.display = 'block';
+}
+
+function hideSessionBanner() {
+  const banner = document.getElementById('sessionBanner');
+  if (banner) banner.style.display = 'none';
 }
 
 // Manual refresh button (user-triggered) - Full page reload
