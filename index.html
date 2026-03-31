@@ -1489,6 +1489,7 @@ let _weightCache = [];   // [{date, weight, id}]
 let _macroCache  = [];   // [{date, time_logged, food_name, calories, protein, carbs, fat, id}]
 let _dbReady = false;    // true once Supabase tables confirmed to exist
 let _currentUserId = null; // cached after login — avoids getUser() network calls on every insert
+let _sbJwt = null;       // current JWT for sbFetch REST calls (updated on sign-in + token refresh)
 
 function copySetupSQL() {
   const sql = document.getElementById('setupSQL').textContent;
@@ -1597,16 +1598,47 @@ async function syncGoalsToSupabase(goals) {
 // OLD: getTargets / saveTargets remain in localStorage (they're settings, not cross-device data)
 // UPDATED: Now saves to both localStorage (instant) + Supabase (cloud backup)
 
-// ── Supabase timeout helper ────────────────────────────────────────────────
-function dbOp(fn, ms = 8000) {
-  // fn must be a function that returns a promise — enables real retry on timeout
+// ── Supabase REST helper (no WebSocket — plain HTTP fetch) ─────────────────
+async function sbFetch(table, opts = {}) {
+  const { method = 'GET', select = '*', filters = {}, order, limit, body } = opts;
+  let url = `${SUPABASE_URL}/rest/v1/${table}`;
+  const params = new URLSearchParams();
+  params.set('select', select);
+  for (const [col, { op, val }] of Object.entries(filters)) {
+    params.set(col, op === 'is' && val === null ? 'is.null' : `${op}.${val}`);
+  }
+  if (order) params.set('order', `${order.col}.${order.ascending !== false ? 'asc' : 'desc'}`);
+  if (limit) params.set('limit', limit);
+  const qs = params.toString();
+  if (qs) url += '?' + qs;
+
+  const headers = {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${_sbJwt || SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+  };
+  if (method === 'POST' || method === 'PATCH') headers['Prefer'] = 'return=representation';
+
+  const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = text;
+    try { msg = JSON.parse(text)?.message || text; } catch {}
+    throw new Error(`DB error (${res.status}): ${msg}`);
+  }
+  if (!text || text === 'null') return null;
+  if (text === '[]') return [];
+  return JSON.parse(text);
+}
+
+// sbOp: sbFetch with 8s timeout + 2s retry (for user-facing operations)
+function sbOp(fn, ms = 8000) {
   const attempt = () => Promise.race([
     fn(),
     new Promise((_, reject) => setTimeout(() => reject(new Error('__TIMEOUT__')), ms))
   ]);
   return attempt().catch(err => {
     if (err.message !== '__TIMEOUT__') throw err;
-    // First timeout — wait 2s for mobile connection to recover, then retry once
     console.warn('[db] Query timed out, retrying in 2s...');
     return new Promise(resolve => setTimeout(resolve, 2000))
       .then(() => attempt())
@@ -1632,15 +1664,14 @@ async function insertMacroEntry(entry) {
     fat:      entry.fat      || 0,
     user_id:  _currentUserId,
   };
-  const { data, error } = await dbOp(() => db.from('macro_entries').insert(row).select().single());
-  if (error) throw error;
+  const rows = await sbOp(() => sbFetch('macro_entries', { method: 'POST', body: row }));
+  const data = Array.isArray(rows) ? rows[0] : rows;
   _macroCache.push(dbMacroToApp(data));
   return data;
 }
 
 async function deleteMacroById(id) {
-  const { error } = await dbOp(() => db.from('macro_entries').delete().eq('id', id));
-  if (error) throw error;
+  await sbOp(() => sbFetch('macro_entries', { method: 'DELETE', filters: { id: { op: 'eq', val: id } } }));
   _macroCache = _macroCache.filter(e => e.id !== id);
 }
 
@@ -1669,13 +1700,13 @@ async function upsertWeightEntry(date, weight) {
   // Check if exists in cache
   const existing = _weightCache.find(e => e.date === date);
   if (existing) {
-    const { data, error } = await dbOp(() => db.from('weight_entries').update({ weight }).eq('id', existing.id).select().single());
-    if (error) throw error;
+    const rows = await sbOp(() => sbFetch('weight_entries', { method: 'PATCH', filters: { id: { op: 'eq', val: existing.id } }, body: { weight } }));
+    const data = Array.isArray(rows) ? rows[0] : rows;
     existing.weight = weight;
     return data;
   } else {
-    const { data, error } = await dbOp(() => db.from('weight_entries').insert({ date, weight, user_id: _currentUserId }).select().single());
-    if (error) throw error;
+    const rows = await sbOp(() => sbFetch('weight_entries', { method: 'POST', body: { date, weight, user_id: _currentUserId } }));
+    const data = Array.isArray(rows) ? rows[0] : rows;
     _weightCache.push(dbWeightToApp(data));
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
     return data;
@@ -1683,8 +1714,7 @@ async function upsertWeightEntry(date, weight) {
 }
 
 async function deleteWeightById(id) {
-  const { error } = await dbOp(() => db.from('weight_entries').delete().eq('id', id));
-  if (error) throw error;
+  await sbOp(() => sbFetch('weight_entries', { method: 'DELETE', filters: { id: { op: 'eq', val: id } } }));
   _weightCache = _weightCache.filter(e => e.id !== id);
 }
 
@@ -1718,8 +1748,8 @@ async function migrateLocalStorageToSupabase() {
     const existingDates = new Set(_weightCache.map(e => e.date));
     const toInsert = oldWeights.filter(e => !existingDates.has(e.date)).map(e => ({ date: e.date, weight: e.weight, user_id: lsUserId }));
     if (toInsert.length) {
-      const { data, error } = await db.from('weight_entries').insert(toInsert).select();
-      if (!error && data) {
+      const data = await sbFetch('weight_entries', { method: 'POST', body: toInsert });
+      if (data) {
         data.forEach(row => _weightCache.push(dbWeightToApp(row)));
         _weightCache.sort((a,b) => a.date.localeCompare(b.date));
       }
@@ -1738,8 +1768,8 @@ async function migrateLocalStorageToSupabase() {
       // Insert in chunks of 100
       for (let i = 0; i < toInsert.length; i += 100) {
         const chunk = toInsert.slice(i, i + 100);
-        const { data, error } = await db.from('macro_entries').insert(chunk).select();
-        if (!error && data) data.forEach(row => _macroCache.push(dbMacroToApp(row)));
+        const data = await sbFetch('macro_entries', { method: 'POST', body: chunk });
+        if (data) data.forEach(row => _macroCache.push(dbMacroToApp(row)));
       }
     }
   }
@@ -2081,8 +2111,8 @@ async function loadQuickAddPresets() {
   // Try Supabase first, fall back to localStorage
   if (_dbReady) {
     try {
-      const { data, error } = await dbOp(() => db.from('quick_add_presets').select('*').order('sort_order'));
-      if (!error && data && data.length > 0) {
+      const data = await sbOp(() => sbFetch('quick_add_presets', { order: { col: 'sort_order', ascending: true }, filters: { user_id: { op: 'eq', val: _currentUserId } } }));
+      if (data && data.length > 0) {
         _presets = data.map(r => ({
           id: r.id, label: r.label, calories: r.calories,
           protein: r.protein, carbs: r.carbs, fat: r.fat, sort_order: r.sort_order
@@ -2117,8 +2147,8 @@ async function seedDefaultPresetsSupabase(defaults) {
       user_id: _currentUserId, label: p.label, calories: p.calories,
       protein: p.protein, carbs: p.carbs, fat: p.fat, sort_order: p.sort_order
     }));
-    const { data, error } = await dbOp(() => db.from('quick_add_presets').insert(rows).select());
-    if (!error && data) {
+    const data = await sbOp(() => sbFetch('quick_add_presets', { method: 'POST', body: rows }));
+    if (data) {
       _presets = data.map(r => ({ id: r.id, label: r.label, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, sort_order: r.sort_order }));
       presetsToLS(_presets);
     }
@@ -2314,7 +2344,7 @@ async function savePreset() {
       // Sync to Supabase if online and not a local_ id
       if (_dbReady && !String(_editingPresetId).startsWith('local_')) {
         try {
-          await dbOp(() => db.from('quick_add_presets').update({ label, calories, protein, carbs, fat }).eq('id', _editingPresetId));
+          await sbOp(() => sbFetch('quick_add_presets', { method: 'PATCH', filters: { id: { op: 'eq', val: _editingPresetId } }, body: { label, calories, protein, carbs, fat } }));
         } catch(e) { console.warn('[presets] Update failed:', e.message); }
       }
     }
@@ -2327,10 +2357,9 @@ async function savePreset() {
     if (_dbReady) {
       try {
         if (_currentUserId) {
-          const { data, error } = await dbOp(() => db.from('quick_add_presets')
-            .insert({ user_id: _currentUserId, label, calories, protein, carbs, fat, sort_order })
-            .select().single());
-          if (!error && data) {
+          const rows = await sbOp(() => sbFetch('quick_add_presets', { method: 'POST', body: { user_id: _currentUserId, label, calories, protein, carbs, fat, sort_order } }));
+          const data = Array.isArray(rows) ? rows[0] : rows;
+          if (data) {
             newPreset.id = data.id;
             presetsToLS(_presets);
           }
@@ -2353,7 +2382,7 @@ async function deletePreset() {
 
   if (_dbReady && !String(id).startsWith('local_')) {
     try {
-      await dbOp(() => db.from('quick_add_presets').delete().eq('id', id));
+      await sbOp(() => sbFetch('quick_add_presets', { method: 'DELETE', filters: { id: { op: 'eq', val: id } } }));
     } catch(e) { console.warn('[presets] Delete failed:', e.message); }
   }
 
@@ -3069,12 +3098,12 @@ async function migrateUnownedData(userId) {
   if (localStorage.getItem(MIGRATED_KEY)) return;
   try {
     // Check if there are unowned rows
-    const { data: unownedW } = await db.from('weight_entries').select('id').is('user_id', null).limit(1);
-    const { data: unownedM } = await db.from('macro_entries').select('id').is('user_id', null).limit(1);
+    const unownedW = await sbFetch('weight_entries', { select: 'id', filters: { user_id: { op: 'is', val: null } }, limit: 1 });
+    const unownedM = await sbFetch('macro_entries', { select: 'id', filters: { user_id: { op: 'is', val: null } }, limit: 1 });
     if ((unownedW && unownedW.length > 0) || (unownedM && unownedM.length > 0)) {
       console.log('[migrate] Assigning unowned rows to current user...');
-      await db.from('weight_entries').update({ user_id: userId }).is('user_id', null);
-      await db.from('macro_entries').update({ user_id: userId }).is('user_id', null);
+      await sbFetch('weight_entries', { method: 'PATCH', filters: { user_id: { op: 'is', val: null } }, body: { user_id: userId } });
+      await sbFetch('macro_entries', { method: 'PATCH', filters: { user_id: { op: 'is', val: null } }, body: { user_id: userId } });
       console.log('[migrate] Done — existing data claimed by user', userId);
     }
     localStorage.setItem(MIGRATED_KEY, '1');
@@ -3109,6 +3138,7 @@ async function initSupabase() {
     // Session found — go straight to app
     console.log(`[auth] Session found in storage for: ${session.user.email}`);
     _currentUserId = session.user.id;
+    _sbJwt = session.access_token;
     hideLoadingState();
     document.getElementById('authOverlay').style.display = 'none';
     await loadAppData(session.user);
@@ -3127,19 +3157,24 @@ async function initSupabase() {
       // User just logged in via the form
       console.log(`[auth] SIGNED_IN for user: ${session.user.email}`);
       _currentUserId = session.user.id;
+      _sbJwt = session.access_token;
       document.getElementById('authOverlay').style.display = 'none';
       await loadAppData(session.user);
+    } else if (event === 'TOKEN_REFRESHED' && session?.access_token) {
+      // Keep _sbJwt current so REST calls always use a valid token
+      _sbJwt = session.access_token;
+      console.log('[auth] Token refreshed, _sbJwt updated');
     } else if (event === 'SIGNED_OUT') {
       // Explicit logout
       console.log('[auth] SIGNED_OUT, showing login screen');
       document.getElementById('authOverlay').style.display = 'flex';
       authSetLoading(false);
       _currentUserId = null;
+      _sbJwt = null;
       _dbReady = false;
       _weightCache = [];
       _macroCache  = [];
     }
-    // Ignore TOKEN_REFRESHED, INITIAL_SESSION, and other events
   });
 
   // Keep session alive with periodic refresh (every 5 min)
@@ -3207,8 +3242,10 @@ function refreshAppSession() {
 async function loadAppData(user) {
   try {
     // Test if tables exist at all
-    const { error: testErr } = await db.from('weight_entries').select('id').limit(1);
-    if (testErr && testErr.code === 'PGRST205') {
+    let testErr = null;
+    try { await sbFetch('weight_entries', { select: 'id', limit: 1 }); }
+    catch(e) { testErr = e; }
+    if (testErr && testErr.message?.includes('PGRST205')) {
       document.getElementById('setupOverlay').style.display = 'block';
       return;
     }
@@ -3221,19 +3258,11 @@ async function loadAppData(user) {
     _dbReady = true;
 
     // Load all weights for this user (RLS filters by user_id automatically)
-    const { data: wData, error: wErr } = await db
-      .from('weight_entries')
-      .select('*')
-      .order('date', { ascending: true });
-    if (wErr) throw wErr;
+    const wData = await sbFetch('weight_entries', { order: { col: 'date', ascending: true } });
     _weightCache = (wData || []).map(dbWeightToApp);
 
     // Load all macros for this user
-    const { data: mData, error: mErr } = await db
-      .from('macro_entries')
-      .select('*')
-      .order('date', { ascending: true });
-    if (mErr) throw mErr;
+    const mData = await sbFetch('macro_entries', { order: { col: 'date', ascending: true } });
     _macroCache = (mData || []).map(dbMacroToApp);
 
     console.log(`[supabase] Loaded ${_weightCache.length} weights + ${_macroCache.length} macros for user ${user.id}`);
@@ -3281,8 +3310,8 @@ async function seedFromDataJson() {
     if (weights.length) {
       const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0, user_id: _currentUserId }));
       for (let i = 0; i < rows.length; i += 100) {
-        const { data: d, error: e } = await db.from('weight_entries').insert(rows.slice(i, i+100)).select();
-        if (!e && d) d.forEach(r => _weightCache.push(dbWeightToApp(r)));
+        const d = await sbFetch('weight_entries', { method: 'POST', body: rows.slice(i, i+100) });
+        if (d) d.forEach(r => _weightCache.push(dbWeightToApp(r)));
       }
     }
     if (macros.length) {
@@ -3292,8 +3321,8 @@ async function seedFromDataJson() {
         user_id: _currentUserId,
       }));
       for (let i = 0; i < rows.length; i += 100) {
-        const { data: d, error: e } = await db.from('macro_entries').insert(rows.slice(i, i+100)).select();
-        if (!e && d) d.forEach(r => _macroCache.push(dbMacroToApp(r)));
+        const d = await sbFetch('macro_entries', { method: 'POST', body: rows.slice(i, i+100) });
+        if (d) d.forEach(r => _macroCache.push(dbMacroToApp(r)));
       }
     }
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
@@ -3313,8 +3342,8 @@ async function refreshFromSupabase() {
   if (now - _lastSyncMs < 2 * 60 * 1000) return; // skip if synced < 2 min ago
   _lastSyncMs = now;
   try {
-    const { data: wData } = await db.from('weight_entries').select('*').order('date', { ascending: true });
-    const { data: mData } = await db.from('macro_entries').select('*').order('date', { ascending: true });
+    const wData = await sbFetch('weight_entries', { order: { col: 'date', ascending: true } });
+    const mData = await sbFetch('macro_entries', { order: { col: 'date', ascending: true } });
     if (wData) _weightCache = wData.map(dbWeightToApp);
     if (mData) _macroCache  = mData.map(dbMacroToApp);
     renderWeightView();

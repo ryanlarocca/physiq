@@ -1,6 +1,6 @@
 // Physiq — Service Worker with cache versioning (Safari PWA fix)
 // Version string for cache busting
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `physiq-${CACHE_VERSION}`;
 
 // Cache strategy: stale-while-revalidate for assets, network-first for API/data
