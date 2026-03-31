@@ -1598,11 +1598,24 @@ async function syncGoalsToSupabase(goals) {
 // UPDATED: Now saves to both localStorage (instant) + Supabase (cloud backup)
 
 // ── Supabase timeout helper ────────────────────────────────────────────────
-function dbOp(promise, ms = 8000) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timed out — check your network')), ms))
+function dbOp(fn, ms = 8000) {
+  // fn must be a function that returns a promise — enables real retry on timeout
+  const attempt = () => Promise.race([
+    fn(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('__TIMEOUT__')), ms))
   ]);
+  return attempt().catch(err => {
+    if (err.message !== '__TIMEOUT__') throw err;
+    // First timeout — wait 2s for mobile connection to recover, then retry once
+    console.warn('[db] Query timed out, retrying in 2s...');
+    return new Promise(resolve => setTimeout(resolve, 2000))
+      .then(() => attempt())
+      .catch(err2 => {
+        throw new Error(err2.message === '__TIMEOUT__'
+          ? 'Connection timed out — check your network'
+          : err2.message);
+      });
+  });
 }
 
 // ── Supabase Macro Operations ─────────────────────────────────────────────
@@ -1619,14 +1632,14 @@ async function insertMacroEntry(entry) {
     fat:      entry.fat      || 0,
     user_id:  _currentUserId,
   };
-  const { data, error } = await dbOp(db.from('macro_entries').insert(row).select().single());
+  const { data, error } = await dbOp(() => db.from('macro_entries').insert(row).select().single());
   if (error) throw error;
   _macroCache.push(dbMacroToApp(data));
   return data;
 }
 
 async function deleteMacroById(id) {
-  const { error } = await dbOp(db.from('macro_entries').delete().eq('id', id));
+  const { error } = await dbOp(() => db.from('macro_entries').delete().eq('id', id));
   if (error) throw error;
   _macroCache = _macroCache.filter(e => e.id !== id);
 }
@@ -1656,12 +1669,12 @@ async function upsertWeightEntry(date, weight) {
   // Check if exists in cache
   const existing = _weightCache.find(e => e.date === date);
   if (existing) {
-    const { data, error } = await dbOp(db.from('weight_entries').update({ weight }).eq('id', existing.id).select().single());
+    const { data, error } = await dbOp(() => db.from('weight_entries').update({ weight }).eq('id', existing.id).select().single());
     if (error) throw error;
     existing.weight = weight;
     return data;
   } else {
-    const { data, error } = await dbOp(db.from('weight_entries').insert({ date, weight, user_id: _currentUserId }).select().single());
+    const { data, error } = await dbOp(() => db.from('weight_entries').insert({ date, weight, user_id: _currentUserId }).select().single());
     if (error) throw error;
     _weightCache.push(dbWeightToApp(data));
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
@@ -1670,7 +1683,7 @@ async function upsertWeightEntry(date, weight) {
 }
 
 async function deleteWeightById(id) {
-  const { error } = await dbOp(db.from('weight_entries').delete().eq('id', id));
+  const { error } = await dbOp(() => db.from('weight_entries').delete().eq('id', id));
   if (error) throw error;
   _weightCache = _weightCache.filter(e => e.id !== id);
 }
@@ -2068,7 +2081,7 @@ async function loadQuickAddPresets() {
   // Try Supabase first, fall back to localStorage
   if (_dbReady) {
     try {
-      const { data, error } = await dbOp(db.from('quick_add_presets').select('*').order('sort_order'));
+      const { data, error } = await dbOp(() => db.from('quick_add_presets').select('*').order('sort_order'));
       if (!error && data && data.length > 0) {
         _presets = data.map(r => ({
           id: r.id, label: r.label, calories: r.calories,
@@ -2104,7 +2117,7 @@ async function seedDefaultPresetsSupabase(defaults) {
       user_id: _currentUserId, label: p.label, calories: p.calories,
       protein: p.protein, carbs: p.carbs, fat: p.fat, sort_order: p.sort_order
     }));
-    const { data, error } = await dbOp(db.from('quick_add_presets').insert(rows).select());
+    const { data, error } = await dbOp(() => db.from('quick_add_presets').insert(rows).select());
     if (!error && data) {
       _presets = data.map(r => ({ id: r.id, label: r.label, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, sort_order: r.sort_order }));
       presetsToLS(_presets);
@@ -2301,7 +2314,7 @@ async function savePreset() {
       // Sync to Supabase if online and not a local_ id
       if (_dbReady && !String(_editingPresetId).startsWith('local_')) {
         try {
-          await dbOp(db.from('quick_add_presets').update({ label, calories, protein, carbs, fat }).eq('id', _editingPresetId));
+          await dbOp(() => db.from('quick_add_presets').update({ label, calories, protein, carbs, fat }).eq('id', _editingPresetId));
         } catch(e) { console.warn('[presets] Update failed:', e.message); }
       }
     }
@@ -2314,7 +2327,7 @@ async function savePreset() {
     if (_dbReady) {
       try {
         if (_currentUserId) {
-          const { data, error } = await dbOp(db.from('quick_add_presets')
+          const { data, error } = await dbOp(() => db.from('quick_add_presets')
             .insert({ user_id: _currentUserId, label, calories, protein, carbs, fat, sort_order })
             .select().single());
           if (!error && data) {
@@ -2340,7 +2353,7 @@ async function deletePreset() {
 
   if (_dbReady && !String(id).startsWith('local_')) {
     try {
-      await dbOp(db.from('quick_add_presets').delete().eq('id', id));
+      await dbOp(() => db.from('quick_add_presets').delete().eq('id', id));
     } catch(e) { console.warn('[presets] Delete failed:', e.message); }
   }
 
