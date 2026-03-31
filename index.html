@@ -1597,6 +1597,14 @@ async function syncGoalsToSupabase(goals) {
 // OLD: getTargets / saveTargets remain in localStorage (they're settings, not cross-device data)
 // UPDATED: Now saves to both localStorage (instant) + Supabase (cloud backup)
 
+// ── Supabase timeout helper ────────────────────────────────────────────────
+function dbOp(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timed out — check your network')), ms))
+  ]);
+}
+
 // ── Supabase Macro Operations ─────────────────────────────────────────────
 
 async function insertMacroEntry(entry) {
@@ -1611,17 +1619,15 @@ async function insertMacroEntry(entry) {
     fat:      entry.fat      || 0,
     user_id:  _currentUserId,
   };
-  const { data, error } = await db.from('macro_entries').insert(row).select().single();
+  const { data, error } = await dbOp(db.from('macro_entries').insert(row).select().single());
   if (error) throw error;
-  // Add to in-memory cache (normalize to app format)
   _macroCache.push(dbMacroToApp(data));
   return data;
 }
 
 async function deleteMacroById(id) {
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Delete timed out — check connection')), 8000));
-  const deleteOp = db.from('macro_entries').delete().eq('id', id).then(({ error }) => { if (error) throw error; });
-  await Promise.race([deleteOp, timeout]);
+  const { error } = await dbOp(db.from('macro_entries').delete().eq('id', id));
+  if (error) throw error;
   _macroCache = _macroCache.filter(e => e.id !== id);
 }
 
@@ -1650,12 +1656,12 @@ async function upsertWeightEntry(date, weight) {
   // Check if exists in cache
   const existing = _weightCache.find(e => e.date === date);
   if (existing) {
-    const { data, error } = await db.from('weight_entries').update({ weight }).eq('id', existing.id).select().single();
+    const { data, error } = await dbOp(db.from('weight_entries').update({ weight }).eq('id', existing.id).select().single());
     if (error) throw error;
     existing.weight = weight;
     return data;
   } else {
-    const { data, error } = await db.from('weight_entries').insert({ date, weight, user_id: _currentUserId }).select().single();
+    const { data, error } = await dbOp(db.from('weight_entries').insert({ date, weight, user_id: _currentUserId }).select().single());
     if (error) throw error;
     _weightCache.push(dbWeightToApp(data));
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
@@ -1664,7 +1670,7 @@ async function upsertWeightEntry(date, weight) {
 }
 
 async function deleteWeightById(id) {
-  const { error } = await db.from('weight_entries').delete().eq('id', id);
+  const { error } = await dbOp(db.from('weight_entries').delete().eq('id', id));
   if (error) throw error;
   _weightCache = _weightCache.filter(e => e.id !== id);
 }
