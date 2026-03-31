@@ -1212,7 +1212,7 @@ CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
         <button class="ai-log-btn" onclick="aiLogMeal()" id="aiLogBtn">Log</button>
         <button class="ai-log-btn" onclick="refreshAppSession()" id="refreshBtn" style="background:#666;" title="Refresh session">🔄</button>
       </div>
-      <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelected(this)">
+      <input type="file" id="photoInput" accept="image/*" style="display:none" onclick="this.value=''" onchange="handlePhotoSelected(this)">
       <!-- Photo preview -->
       <div id="photoPreviewWrap">
         <div style="display:flex;gap:8px;align-items:flex-start">
@@ -1619,8 +1619,9 @@ async function insertMacroEntry(entry) {
 }
 
 async function deleteMacroById(id) {
-  const { error } = await db.from('macro_entries').delete().eq('id', id);
-  if (error) throw error;
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Delete timed out — check connection')), 8000));
+  const deleteOp = db.from('macro_entries').delete().eq('id', id).then(({ error }) => { if (error) throw error; });
+  await Promise.race([deleteOp, timeout]);
   _macroCache = _macroCache.filter(e => e.id !== id);
 }
 
