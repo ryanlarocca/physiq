@@ -2057,7 +2057,7 @@ async function loadQuickAddPresets() {
   // Try Supabase first, fall back to localStorage
   if (_dbReady) {
     try {
-      const { data, error } = await db.from('quick_add_presets').select('*').order('sort_order');
+      const { data, error } = await dbOp(db.from('quick_add_presets').select('*').order('sort_order'));
       if (!error && data && data.length > 0) {
         _presets = data.map(r => ({
           id: r.id, label: r.label, calories: r.calories,
@@ -2093,7 +2093,7 @@ async function seedDefaultPresetsSupabase(defaults) {
       user_id: _currentUserId, label: p.label, calories: p.calories,
       protein: p.protein, carbs: p.carbs, fat: p.fat, sort_order: p.sort_order
     }));
-    const { data, error } = await db.from('quick_add_presets').insert(rows).select();
+    const { data, error } = await dbOp(db.from('quick_add_presets').insert(rows).select());
     if (!error && data) {
       _presets = data.map(r => ({ id: r.id, label: r.label, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat, sort_order: r.sort_order }));
       presetsToLS(_presets);
@@ -2290,7 +2290,7 @@ async function savePreset() {
       // Sync to Supabase if online and not a local_ id
       if (_dbReady && !String(_editingPresetId).startsWith('local_')) {
         try {
-          await db.from('quick_add_presets').update({ label, calories, protein, carbs, fat }).eq('id', _editingPresetId);
+          await dbOp(db.from('quick_add_presets').update({ label, calories, protein, carbs, fat }).eq('id', _editingPresetId));
         } catch(e) { console.warn('[presets] Update failed:', e.message); }
       }
     }
@@ -2303,9 +2303,9 @@ async function savePreset() {
     if (_dbReady) {
       try {
         if (_currentUserId) {
-          const { data, error } = await db.from('quick_add_presets')
+          const { data, error } = await dbOp(db.from('quick_add_presets')
             .insert({ user_id: _currentUserId, label, calories, protein, carbs, fat, sort_order })
-            .select().single();
+            .select().single());
           if (!error && data) {
             newPreset.id = data.id;
             presetsToLS(_presets);
@@ -2329,7 +2329,7 @@ async function deletePreset() {
 
   if (_dbReady && !String(id).startsWith('local_')) {
     try {
-      await db.from('quick_add_presets').delete().eq('id', id);
+      await dbOp(db.from('quick_add_presets').delete().eq('id', id));
     } catch(e) { console.warn('[presets] Delete failed:', e.message); }
   }
 
