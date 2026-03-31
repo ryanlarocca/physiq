@@ -2462,6 +2462,15 @@ function saveGeminiKey() {
   c.classList.add('show'); setTimeout(() => c.classList.remove('show'), 2000);
 }
 
+async function safeJson(res) {
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: server returned non-JSON response`);
+  }
+  return res.json();
+}
+
 function extractJSON(raw) {
   const cb = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (cb) return JSON.parse(cb[1]);
@@ -2488,7 +2497,7 @@ async function aiLogMeal() {
       signal: controller.signal
     });
     clearTimeout(timeout);
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok) throw new Error(data.error || 'API error');
     parsed = data;
     await insertMacroEntry({ date:todayStr(), time:nowTime12(), ...parsed });
@@ -2602,7 +2611,7 @@ async function aiLogFromPhoto() {
     });
     clearTimeout(timeoutId);
     console.log('[PHOTO] Proxy response status:', res.status);
-    const data = await res.json();
+    const data = await safeJson(res);
     console.log('[PHOTO] Proxy response data:', data);
     if (!res.ok) throw new Error(data.error || 'API error');
     parsed = data;
