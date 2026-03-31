@@ -1745,6 +1745,7 @@ async function migrateLocalStorageToSupabase() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 let todayChartInst = null;
+let todayChartDataHash = null;
 let historyChartInst = null;
 let macroRange = 7;
 
@@ -1837,11 +1838,17 @@ function renderMacrosView() {
     </div>`;
   }).join('');
 
-  // Today meal chart (in Data tab — render always, chart renders fine when hidden)
+  // Today meal chart — only rebuild if data changed
   const forChart = [...todayLogs].sort((a,b) => a.time.localeCompare(b.time));
-  if (todayChartInst) todayChartInst.destroy();
+  const newHash = forChart.map(l => `${l.id}:${l.calories}`).join('|');
   const ctx = document.getElementById('todayChart').getContext('2d');
-  if (forChart.length > 0) {
+  if (newHash === todayChartDataHash && todayChartInst) {
+    // data unchanged — skip expensive chart rebuild
+  } else {
+    todayChartDataHash = newHash;
+    if (todayChartInst) { todayChartInst.destroy(); todayChartInst = null; }
+  }
+  if (forChart.length > 0 && !todayChartInst) {
     todayChartInst = new Chart(ctx, {
       type: 'bar',
       data: {
