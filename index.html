@@ -1841,39 +1841,41 @@ function renderMacrosView() {
   // Today meal chart — only rebuild if data changed
   const forChart = [...todayLogs].sort((a,b) => a.time.localeCompare(b.time));
   const newHash = forChart.map(l => `${l.id}:${l.calories}`).join('|');
-  const ctx = document.getElementById('todayChart').getContext('2d');
-  if (newHash === todayChartDataHash && todayChartInst) {
-    // data unchanged — skip expensive chart rebuild
+  const todayCanvas = document.getElementById('todayChart');
+  const ctx = todayCanvas.getContext('2d');
+  if (newHash === todayChartDataHash) {
+    // data unchanged — skip rebuild
   } else {
     todayChartDataHash = newHash;
-    if (todayChartInst) { todayChartInst.destroy(); todayChartInst = null; }
-  }
-  if (forChart.length > 0 && !todayChartInst) {
-    todayChartInst = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: forChart.map(l => `${l.time} ${l.description.slice(0, 12)}…`),
-        datasets: [
-          { label:'Protein', data: forChart.map(l => l.protein*4), backgroundColor:'#43e97b', stack:'m' },
-          { label:'Carbs',   data: forChart.map(l => l.carbs*4),   backgroundColor:'#ffd166', stack:'m' },
-          { label:'Fat',     data: forChart.map(l => l.fat*9),     backgroundColor:'#ff6b6b', borderRadius:4, stack:'m' }
-        ]
-      },
-      options: {
-        responsive:true, maintainAspectRatio:true,
-        plugins: {
-          legend: { labels:{ color:'#8888aa', boxWidth:12, font:{size:11} } },
-          tooltip: { callbacks:{ label: c => ` ${c.dataset.label}: ${Math.round(c.raw)} kcal` } }
-        },
-        scales: {
-          x: { ticks:{color:'#8888aa',font:{size:10}}, grid:{color:'#2e2e42'} },
-          y: { ticks:{color:'#8888aa',font:{size:10}}, grid:{color:'#2e2e42'}, title:{display:true,text:'kcal',color:'#8888aa',font:{size:10}} }
-        }
-      }
-    });
-  } else {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const existing = Chart.getChart(todayCanvas);
+    if (existing) existing.destroy();
     todayChartInst = null;
+    if (forChart.length > 0) {
+      todayChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: forChart.map(l => `${l.time} ${l.description.slice(0, 12)}…`),
+          datasets: [
+            { label:'Protein', data: forChart.map(l => l.protein*4), backgroundColor:'#43e97b', stack:'m' },
+            { label:'Carbs',   data: forChart.map(l => l.carbs*4),   backgroundColor:'#ffd166', stack:'m' },
+            { label:'Fat',     data: forChart.map(l => l.fat*9),     backgroundColor:'#ff6b6b', borderRadius:4, stack:'m' }
+          ]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:true,
+          plugins: {
+            legend: { labels:{ color:'#8888aa', boxWidth:12, font:{size:11} } },
+            tooltip: { callbacks:{ label: c => ` ${c.dataset.label}: ${Math.round(c.raw)} kcal` } }
+          },
+          scales: {
+            x: { ticks:{color:'#8888aa',font:{size:10}}, grid:{color:'#2e2e42'} },
+            y: { ticks:{color:'#8888aa',font:{size:10}}, grid:{color:'#2e2e42'}, title:{display:true,text:'kcal',color:'#8888aa',font:{size:10}} }
+          }
+        }
+      });
+    } else {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
   }
 
   // Meal list
