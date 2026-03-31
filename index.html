@@ -1919,8 +1919,10 @@ function renderMacroHistory() {
   const calData = dates.map(d => byDate[d].calories);
   const targets = getTargets();
 
-  if (historyChartInst) historyChartInst.destroy();
-  const ctx = document.getElementById('historyChart').getContext('2d');
+  const historyCanvas = document.getElementById('historyChart');
+  const existing_h = Chart.getChart(historyCanvas);
+  if (existing_h) existing_h.destroy();
+  const ctx = historyCanvas.getContext('2d');
   historyChartInst = new Chart(ctx, {
     type: 'line',
     data: {
@@ -2793,8 +2795,10 @@ function renderWeightView() {
   const avg7data = movingAvg(chartEntries, 7);
   const avg30data= movingAvg(chartEntries, 30);
 
-  const wCtx = document.getElementById('weightChart').getContext('2d');
-  if (weightChart) weightChart.destroy();
+  const weightCanvas = document.getElementById('weightChart');
+  const existing_w = Chart.getChart(weightCanvas);
+  if (existing_w) existing_w.destroy();
+  const wCtx = weightCanvas.getContext('2d');
 
   const datasets = [
     { label:'Weight', data:weights, borderColor:'rgba(108,99,255,0.8)', backgroundColor:'rgba(108,99,255,0.08)',
