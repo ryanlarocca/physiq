@@ -2838,7 +2838,6 @@ function renderWeightView() {
   const avg30data= movingAvg(chartEntries, 30);
 
   const allVisible = [...weights, ...avg7data.filter(v => v !== null)];
-  if (goal) allVisible.push(goal);
   const dataMin = allVisible.length ? Math.min(...allVisible) : 150;
   const dataMax = allVisible.length ? Math.max(...allVisible) : 250;
   const dataSpan = dataMax - dataMin;
