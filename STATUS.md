@@ -1,7 +1,13 @@
 # Physiq – Status
 
-**Last Updated:** March 15, 2026  
-**Status:** ✅ LIVE at https://ryanlarocca.github.io/physiq/
+**Last Updated:** June 15, 2026  
+**Status:** ✅ LIVE at https://ryanlarocca.github.io/physiq/  
+**Changelog:** [CHANGELOG.md](./CHANGELOG.md)
+
+## 📍 Where we left off
+- **Now —** Weight chart Y-axis fixed to zoom to actual weight range; goal line no longer stretches the axis. Live on GitHub Pages.
+- **Next —** Telegram bot token swap, point macro-bot to `physiq/data.json`, deprecate old macro-tracker / weight-tracker repos.
+- **Blockers / open —** None.
 
 ---
 
