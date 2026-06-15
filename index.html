@@ -2837,6 +2837,15 @@ function renderWeightView() {
   const avg7data = movingAvg(chartEntries, 7);
   const avg30data= movingAvg(chartEntries, 30);
 
+  const allVisible = [...weights, ...avg7data.filter(v => v !== null)];
+  if (goal) allVisible.push(goal);
+  const dataMin = allVisible.length ? Math.min(...allVisible) : 150;
+  const dataMax = allVisible.length ? Math.max(...allVisible) : 250;
+  const dataSpan = dataMax - dataMin;
+  const yBuffer = Math.max(1, dataSpan * 0.15);
+  const yMin = Math.floor(dataMin - yBuffer);
+  const yMax = Math.ceil(dataMax + yBuffer);
+
   const weightCanvas = document.getElementById('weightChart');
   const existing_w = Chart.getChart(weightCanvas);
   if (existing_w) existing_w.destroy();
@@ -2867,7 +2876,7 @@ function renderWeightView() {
       },
       scales:{
         x:{ ticks:{color:'#8888aa',font:{size:10},maxTicksLimit:8}, grid:{color:'rgba(255,255,255,0.04)'}, border:{color:'transparent'} },
-        y:{ ticks:{color:'#8888aa',font:{size:11}}, grid:{color:'rgba(255,255,255,0.05)'}, border:{color:'transparent'} }
+        y:{ min: yMin, max: yMax, ticks:{color:'#8888aa',font:{size:11}}, grid:{color:'rgba(255,255,255,0.05)'}, border:{color:'transparent'} }
       }
     }
   });
