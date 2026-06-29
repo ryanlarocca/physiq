@@ -1,13 +1,20 @@
 # Physiq – Status
 
-**Last Updated:** June 15, 2026  
+**Last Updated:** June 29, 2026  
 **Status:** ✅ LIVE at https://ryanlarocca.github.io/physiq/  
 **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
 ## 📍 Where we left off
-- **Now —** Weight chart Y-axis fixed to zoom to actual weight range; goal line no longer stretches the axis. Live on GitHub Pages.
-- **Next —** Telegram bot token swap, point macro-bot to `physiq/data.json`, deprecate old macro-tracker / weight-tracker repos.
-- **Blockers / open —** None.
+- **Now —** Multi-user launch ready. Login is **passwordless email OTP** (6-digit code, no link) — fixes the "got the email but couldn't log in" bug. Each user gets **isolated data** (Supabase RLS by `user_id`); removed the `seedFromDataJson` bug that injected Ryan's data into every new account. AI food logging moved off the dead OpenRouter key onto the **Anthropic API directly** (Claude Sonnet 4.6, text + photo), and the `physiq-api` proxy is now **JWT-gated** (only signed-in users can spend AI). The in-app Gemini-key field is gone (keys are server-side).
+- **Next —** Ryan's phone smoke test (real OTP email, photo macros, PWA v6); re-engage the 3 stuck unconfirmed users (they auto-recover by requesting a code).
+- **Blockers / open —** Fix the broken `com.physiq.weight-sync` launchd job (points at a missing `sync-weights.sh`). Optionally retire the unused OpenRouter key + `gemini.js`.
+
+## 🔧 Ops scripts (`scripts/`, run from repo root)
+- `node scripts/backup-csv.mjs` — dump all Supabase data → `backups/` CSVs (gitignored)
+- `node scripts/test-isolation.mjs` — RLS per-user isolation test (real user JWTs)
+- `node scripts/test-ui.mjs` — headless OTP UI + new-user-starts-empty test
+- `node scripts/set-otp-email.mjs` — (re)apply the 6-digit OTP email template
+- `node scripts/sb.mjs "<sql>"` — ad-hoc query via Supabase Management API (PAT in `.env.local`)
 
 ---
 
