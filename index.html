@@ -864,29 +864,31 @@
       <p>Your AI fitness co-pilot</p>
     </div>
 
-    <div id="authSignIn">
+    <!-- Step 1 — enter email -->
+    <div id="authStepEmail">
       <div class="auth-field">
         <label>Email</label>
-        <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
+        <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email" inputmode="email"
+               onkeydown="if(event.key==='Enter')authSendCode()">
       </div>
+      <button class="auth-btn" id="authSendBtn" onclick="authSendCode()">Send my code</button>
+    </div>
+
+    <!-- Step 2 — enter the 6-digit code -->
+    <div id="authStepCode" style="display:none">
       <div class="auth-field">
-        <label>Password</label>
-        <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password">
+        <label>Enter your 6-digit code</label>
+        <input type="text" id="authCode" placeholder="••••••" autocomplete="one-time-code" inputmode="numeric"
+               maxlength="6" onkeydown="if(event.key==='Enter')authVerifyCode()">
       </div>
-      <button class="auth-btn" id="authSignInBtn" onclick="authSignIn()">Sign In</button>
-      <button class="auth-btn-secondary" id="authSignUpBtn" onclick="authSignUp()">Create Account</button>
-      <div class="auth-error" id="authError"></div>
-      <div class="auth-forgot">
-        <a onclick="authForgotPassword()">Forgot password?</a>
-      </div>
+      <button class="auth-btn" id="authVerifyBtn" onclick="authVerifyCode()">Verify &amp; sign in</button>
       <div class="auth-toggle">
-        New here? <a onclick="authToggleMode()">Create an account</a>
+        <a onclick="authResendCode()">Resend code</a> &nbsp;·&nbsp; <a onclick="authChangeEmail()">Change email</a>
       </div>
     </div>
 
-    <div id="authMode" style="display:none">
-      <!-- mode: 'signin' | 'signup' — toggled via JS -->
-    </div>
+    <div class="auth-error" id="authError"></div>
+    <div class="auth-forgot" id="authHint">We'll email you a 6-digit code — no password, no link.</div>
   </div>
 </div>
 
@@ -1489,6 +1491,7 @@ let _weightCache = [];   // [{date, weight, id}]
 let _macroCache  = [];   // [{date, time_logged, food_name, calories, protein, carbs, fat, id}]
 let _dbReady = false;    // true once Supabase tables confirmed to exist
 let _currentUserId = null; // cached after login — avoids getUser() network calls on every insert
+let _currentUserEmail = null; // cached after login — used for bug reports
 let _sbJwt = null;       // current JWT for sbFetch REST calls (updated on sign-in + token refresh)
 
 function copySetupSQL() {
@@ -2477,36 +2480,8 @@ function toggleSettings() {
 // AI LOGGING (Gemini)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const GEMINI_KEY_LS = 'mt_gemini_key';
-const GEMINI_KEY_HARDCODED = ''; // key handled server-side via /api/gemini proxy
-async function getGeminiKey() {
-  // Key is handled server-side — return sentinel value
-  return 'use-proxy';
-  
-  // (legacy code below kept for reference but never reached)
-  let key = localStorage.getItem(GEMINI_KEY_LS) || '';
-  if (key) return key;
-  
-  try {
-    const res = await fetch('/api/gemini-key');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.key) {
-        key = data.key;
-        localStorage.setItem(GEMINI_KEY_LS, key);
-      }
-    }
-  } catch(e) {
-    // Silently fail if server endpoint not available
-  }
-  return key;
-}
-function saveGeminiKey() {
-  const val = document.getElementById('geminiKeyInput').value.trim();
-  if (val) localStorage.setItem(GEMINI_KEY_LS, val);
-  const c = document.getElementById('keyConfirm');
-  c.classList.add('show'); setTimeout(() => c.classList.remove('show'), 2000);
-}
+// AI keys live server-side in the physiq-api proxy — the app never handles a key.
+// (Old getGeminiKey/saveGeminiKey + the Settings key field were removed.)
 
 async function safeJson(res) {
   const ct = res.headers.get('content-type') || '';
@@ -2538,7 +2513,7 @@ async function aiLogMeal() {
     let parsed;
     // Call Vercel proxy (keeps API key server-side, never exposed in public code)
     const res = await fetch('https://physiq-api.vercel.app/api/parse-meal', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (_sbJwt || '') },
       body: JSON.stringify({ text }),
       signal: controller.signal
     });
@@ -2651,7 +2626,7 @@ async function aiLogFromPhoto() {
     const payload = { imageBase64: currentPhotoBase64, mimeType: currentPhotoMime, caption };
     console.log('[PHOTO] Request payload size:', JSON.stringify(payload).length, 'bytes');
     const res = await fetch('https://physiq-api.vercel.app/api/parse-meal-photo', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (_sbJwt || '') },
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -2977,8 +2952,6 @@ async function renderLogView() {
   document.getElementById('goalProtein').value = t.protein;
   document.getElementById('goalCarbs').value   = t.carbs;
   document.getElementById('goalFat').value     = t.fat;
-  const k = await getGeminiKey();
-  if (k) document.getElementById('geminiKeyInput').value = k;
   // Sync date pickers
   document.getElementById('wInputDate').value = todayStr();
 }
@@ -2987,110 +2960,87 @@ async function renderLogView() {
 // AUTH — Login, Signup, Sign Out
 // ═══════════════════════════════════════════════════════════════════════════
 
-let _authMode = 'signin'; // 'signin' | 'signup'
+// Passwordless email OTP — one flow for new + returning users. A 6-digit code is
+// emailed and typed back into THIS tab (no link), so it works in any browser or
+// in-app webview. Fixes the old "got the email but couldn't log in" bug.
 
-function authSetError(msg) {
-  document.getElementById('authError').textContent = msg || '';
-}
+let _otpEmail = ''; // email the current code was sent to
 
+function authSetError(msg) { document.getElementById('authError').textContent = msg || ''; }
+function authSetHint(msg)  { const el = document.getElementById('authHint'); if (el) el.textContent = msg || ''; }
+
+// Kept for the SIGNED_OUT handler in initSupabase — resets the OTP screen buttons.
 function authSetLoading(loading) {
-  const btn1 = document.getElementById('authSignInBtn');
-  const btn2 = document.getElementById('authSignUpBtn');
-  if (loading) {
-    btn1.disabled = true; btn1.textContent = '...';
-    btn2.disabled = true;
-  } else {
-    btn1.disabled = false; btn1.textContent = 'Sign In';
-    btn2.disabled = false;
-  }
+  const send = document.getElementById('authSendBtn');
+  const ver  = document.getElementById('authVerifyBtn');
+  if (send) { send.disabled = loading; send.textContent = loading ? '...' : 'Send my code'; }
+  if (ver)  { ver.disabled  = loading; ver.textContent  = loading ? '...' : 'Verify & sign in'; }
 }
 
-function authToggleMode() {
-  _authMode = _authMode === 'signin' ? 'signup' : 'signin';
-  const toggleLink = document.querySelector('.auth-toggle');
-  const forgotEl = document.querySelector('.auth-forgot');
-  const btn1 = document.getElementById('authSignInBtn');
-  const btn2 = document.getElementById('authSignUpBtn');
-  if (_authMode === 'signup') {
-    btn1.textContent = 'Create Account';
-    btn1.onclick = authSignUp;
-    btn2.textContent = 'Sign In Instead';
-    btn2.onclick = authSignIn;
-    toggleLink.innerHTML = 'Already have an account? <a onclick="authToggleMode()">Sign in</a>';
-    if (forgotEl) forgotEl.style.display = 'none';
-  } else {
-    btn1.textContent = 'Sign In';
-    btn1.onclick = authSignIn;
-    btn2.textContent = 'Create Account';
-    btn2.onclick = authSignUp;
-    toggleLink.innerHTML = 'New here? <a onclick="authToggleMode()">Create an account</a>';
-    if (forgotEl) forgotEl.style.display = '';
-  }
+function authShowStep(step) {
+  document.getElementById('authStepEmail').style.display = step === 'email' ? '' : 'none';
+  document.getElementById('authStepCode').style.display  = step === 'code'  ? '' : 'none';
+}
+
+function authChangeEmail() {
+  authShowStep('email');
   authSetError('');
-  document.getElementById('authPassword').value = '';
+  authSetHint("We'll email you a 6-digit code — no password, no link.");
+  document.getElementById('authCode').value = '';
+  document.getElementById('authEmail').focus();
 }
 
-async function authSignIn() {
-  const email    = document.getElementById('authEmail').value.trim();
-  const password = document.getElementById('authPassword').value;
-  if (!email || !password) { authSetError('Enter your email and password'); return; }
-  authSetLoading(true); authSetError('');
-  try {
-    const { data, error } = await db.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    // onAuthStateChange handles the rest
-  } catch(e) {
-    authSetError(e.message || 'Sign in failed');
-    authSetLoading(false);
-  }
-}
-
-async function authSignUp() {
-  const email    = document.getElementById('authEmail').value.trim();
-  const password = document.getElementById('authPassword').value;
-  if (!email || !password) { authSetError('Enter your email and password'); return; }
-  if (password.length < 6) { authSetError('Password must be at least 6 characters'); return; }
-  authSetLoading(true); authSetError('');
-  try {
-    const { data, error } = await db.auth.signUp({ email, password });
-    if (error) throw error;
-    if (data?.user && !data?.session) {
-      // Email confirmation required — disable buttons and wait for confirmation
-      authSetError('');
-      document.getElementById('authSignInBtn').textContent = '✅ Check your email to confirm';
-      document.getElementById('authSignInBtn').disabled = true;
-      document.getElementById('authSignUpBtn').disabled = true;
-      // Re-enable the UI if the user confirms their email and the session becomes active.
-      // Without this, the buttons stay disabled forever on return.
-      const { data: { subscription } } = db.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          subscription.unsubscribe();
-          authSetLoading(false);
-          // The global onAuthStateChange in initSupabase will handle showing the app.
-        } else if (event === 'SIGNED_OUT') {
-          subscription.unsubscribe();
-          authSetLoading(false);
-        }
-      });
-    }
-    // If session exists, onAuthStateChange handles the rest
-  } catch(e) {
-    authSetError(e.message || 'Sign up failed');
-    authSetLoading(false);
-  }
-}
-
-async function authForgotPassword() {
+// Step 1 — email the code. shouldCreateUser:true means a brand-new email auto-creates
+// an account; an existing one just gets a login code. One flow handles both.
+async function authSendCode() {
   const email = document.getElementById('authEmail').value.trim();
-  if (!email) { authSetError('Enter your email first'); return; }
+  if (!email || !email.includes('@')) { authSetError('Enter a valid email'); return; }
+  const btn = document.getElementById('authSendBtn');
+  btn.disabled = true; btn.textContent = '...';
   authSetError('');
-  const { error } = await db.auth.resetPasswordForEmail(email);
-  if (error) { authSetError(error.message); return; }
+  try {
+    const { error } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    if (error) throw error;
+    _otpEmail = email;
+    authShowStep('code');
+    authSetHint(`Code sent to ${email}. Check your inbox (and spam).`);
+    setTimeout(() => document.getElementById('authCode').focus(), 50);
+  } catch(e) {
+    authSetError(e.message || 'Could not send code');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Send my code';
+  }
+}
+
+// Step 2 — verify. verifyOtp confirms the email AND creates the session in one shot,
+// so previously-stuck unconfirmed users are recovered right here.
+async function authVerifyCode() {
+  const token = document.getElementById('authCode').value.trim();
+  if (!/^\d{6}$/.test(token)) { authSetError('Enter the 6-digit code'); return; }
+  const btn = document.getElementById('authVerifyBtn');
+  btn.disabled = true; btn.textContent = '...';
   authSetError('');
-  document.getElementById('authSignInBtn').textContent = '✅ Reset email sent!';
-  setTimeout(() => {
-    document.getElementById('authSignInBtn').textContent = 'Sign In';
-  }, 3000);
+  try {
+    const { error } = await db.auth.verifyOtp({ email: _otpEmail, token, type: 'email' });
+    if (error) throw error;
+    // onAuthStateChange (SIGNED_IN) takes over and loads the app.
+  } catch(e) {
+    authSetError(e.message || 'Invalid or expired code');
+    btn.disabled = false; btn.textContent = 'Verify & sign in';
+  }
+}
+
+async function authResendCode() {
+  if (!_otpEmail) { authChangeEmail(); return; }
+  authSetError('');
+  authSetHint('Resending…');
+  try {
+    const { error } = await db.auth.signInWithOtp({ email: _otpEmail, options: { shouldCreateUser: true } });
+    if (error) throw error;
+    authSetHint(`New code sent to ${_otpEmail}.`);
+  } catch(e) {
+    authSetError(e.message || 'Could not resend');
+  }
 }
 
 async function authSignOut() {
@@ -3100,25 +3050,10 @@ async function authSignOut() {
   location.reload();
 }
 
-// Migrate unowned data to newly logged-in user (Ryan's existing data)
-async function migrateUnownedData(userId) {
-  const MIGRATED_KEY = `physiq_user_migrated_${userId}`;
-  if (localStorage.getItem(MIGRATED_KEY)) return;
-  try {
-    // Check if there are unowned rows
-    const unownedW = await sbFetch('weight_entries', { select: 'id', filters: { user_id: { op: 'is', val: null } }, limit: 1 });
-    const unownedM = await sbFetch('macro_entries', { select: 'id', filters: { user_id: { op: 'is', val: null } }, limit: 1 });
-    if ((unownedW && unownedW.length > 0) || (unownedM && unownedM.length > 0)) {
-      console.log('[migrate] Assigning unowned rows to current user...');
-      await sbFetch('weight_entries', { method: 'PATCH', filters: { user_id: { op: 'is', val: null } }, body: { user_id: userId } });
-      await sbFetch('macro_entries', { method: 'PATCH', filters: { user_id: { op: 'is', val: null } }, body: { user_id: userId } });
-      console.log('[migrate] Done — existing data claimed by user', userId);
-    }
-    localStorage.setItem(MIGRATED_KEY, '1');
-  } catch(e) {
-    console.warn('[migrate] Unowned data migration failed (non-critical):', e.message);
-  }
-}
+// NOTE: the old migrateUnownedData() was removed. It claimed any user_id IS NULL
+// rows for whoever logged in next — a cross-user data-leak risk on a shared link.
+// All existing data is already owned, and RLS hides null-user rows from everyone,
+// so there is nothing to migrate.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPABASE INIT — Load all data from Supabase on startup
@@ -3146,6 +3081,7 @@ async function initSupabase() {
     // Session found — go straight to app
     console.log(`[auth] Session found in storage for: ${session.user.email}`);
     _currentUserId = session.user.id;
+    _currentUserEmail = session.user.email;
     _sbJwt = session.access_token;
     hideLoadingState();
     document.getElementById('authOverlay').style.display = 'none';
@@ -3165,6 +3101,7 @@ async function initSupabase() {
       // User just logged in via the form
       console.log(`[auth] SIGNED_IN for user: ${session.user.email}`);
       _currentUserId = session.user.id;
+      _currentUserEmail = session.user.email;
       _sbJwt = session.access_token;
       document.getElementById('authOverlay').style.display = 'none';
       await loadAppData(session.user);
@@ -3177,7 +3114,9 @@ async function initSupabase() {
       console.log('[auth] SIGNED_OUT, showing login screen');
       document.getElementById('authOverlay').style.display = 'flex';
       authSetLoading(false);
+      authChangeEmail(); // reset OTP screen back to the email step
       _currentUserId = null;
+      _currentUserEmail = null;
       _sbJwt = null;
       _dbReady = false;
       _weightCache = [];
@@ -3260,9 +3199,6 @@ async function loadAppData(user) {
 
     // DB migration (user_id column + RLS) is already complete — no check needed.
 
-    // Migrate any unowned data to this user (first-login migration for Ryan's existing data)
-    await migrateUnownedData(user.id);
-
     _dbReady = true;
 
     // Load all weights for this user (RLS filters by user_id automatically)
@@ -3275,13 +3211,12 @@ async function loadAppData(user) {
 
     console.log(`[supabase] Loaded ${_weightCache.length} weights + ${_macroCache.length} macros for user ${user.id}`);
 
-    // Migrate any localStorage data (runs once)
+    // Migrate this browser's own localStorage data, if any (runs once, no-op for new users)
     await migrateLocalStorageToSupabase();
 
-    // If both tables empty, try seeding from data.json
-    if (_weightCache.length === 0 && _macroCache.length === 0) {
-      await seedFromDataJson();
-    }
+    // NOTE: seedFromDataJson() was removed — it injected Ryan's bundled data.json into
+    // ANY empty account, so every new user got Ryan's weigh-ins/macros. New users must
+    // start empty. Ryan's data already lives in Supabase under his own account.
 
     // Update header with user email
     const shortEmail = user.email ? user.email.split('@')[0] : '';
@@ -3300,47 +3235,7 @@ async function loadAppData(user) {
   }
 }
 
-// Seed from data.json if Supabase tables are empty (one-time historical import)
-async function seedFromDataJson() {
-  const SEED_KEY = 'physiq_seeded_from_datajson_v1';
-  if (localStorage.getItem(SEED_KEY)) return;
-  try {
-    // Try to fetch data.json from the same origin (works on GitHub Pages and localhost)
-    const res = await fetch('/data.json', { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return;
-    const data = await res.json();
-    const weights = Array.isArray(data.weights) ? data.weights : [];
-    const macros  = Array.isArray(data.macros)  ? data.macros  : [];
-    if (!weights.length && !macros.length) return;
-
-    console.log(`[seed] Seeding ${weights.length} weights + ${macros.length} macros from data.json...`);
-
-    if (weights.length) {
-      const rows = weights.map(e => ({ date: e.date, weight: parseFloat(e.weight) || 0, user_id: _currentUserId }));
-      for (let i = 0; i < rows.length; i += 100) {
-        const d = await sbFetch('weight_entries', { method: 'POST', body: rows.slice(i, i+100) });
-        if (d) d.forEach(r => _weightCache.push(dbWeightToApp(r)));
-      }
-    }
-    if (macros.length) {
-      const rows = macros.map(e => ({
-        date: e.date, food_name: e.description || '', time_logged: e.time || null,
-        calories: e.calories || 0, protein: e.protein || 0, carbs: e.carbs || 0, fat: e.fat || 0,
-        user_id: _currentUserId,
-      }));
-      for (let i = 0; i < rows.length; i += 100) {
-        const d = await sbFetch('macro_entries', { method: 'POST', body: rows.slice(i, i+100) });
-        if (d) d.forEach(r => _macroCache.push(dbMacroToApp(r)));
-      }
-    }
-    _weightCache.sort((a,b) => a.date.localeCompare(b.date));
-    _macroCache.sort((a,b) => a.date.localeCompare(b.date));
-    localStorage.setItem(SEED_KEY, '1');
-    console.log('[seed] Done. Seeded from data.json.');
-  } catch(e) {
-    console.warn('[seed] data.json seed failed (non-critical):', e.message);
-  }
-}
+// (seedFromDataJson removed — see note in loadAppData. data.json is no longer fetched.)
 
 // Re-sync from Supabase (e.g., on tab focus)
 let _lastSyncMs = 0;
@@ -3391,16 +3286,6 @@ renderMacrosView();
 renderLogView().catch(e => console.error('Error initializing log view:', e));
 // Load quick-add presets from localStorage immediately (Supabase sync happens after login)
 loadQuickAddPresets().catch(() => {});
-
-// Auth keyboard shortcuts
-document.getElementById('authEmail').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('authPassword').focus();
-});
-document.getElementById('authPassword').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    if (_authMode === 'signup') authSignUp(); else authSignIn();
-  }
-});
 
 // Initialize auth + load data
 initSupabase();
@@ -3454,13 +3339,13 @@ async function submitBugReport() {
   btn.textContent = '⏳ Sending...';
   btn.disabled = true;
   try {
-    const userEmail = 'unknown@physiq.app';
+    const userEmail = _currentUserEmail || 'unknown@physiq.app';
     
     console.log('[submitBugReport] Submitting:', { description, userEmail });
     
     const res = await fetch('https://physiq-api.vercel.app/api/submit-bug', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (_sbJwt || '') },
       body: JSON.stringify({
         description,
         userEmail
