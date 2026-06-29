@@ -5,9 +5,9 @@
 **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
 ## 📍 Where we left off
-- **Now —** Multi-user launch ready. Login is **passwordless email OTP** (6-digit code, no link) — fixes the "got the email but couldn't log in" bug. Each user gets **isolated data** (Supabase RLS by `user_id`); removed the `seedFromDataJson` bug that injected Ryan's data into every new account. AI food logging moved off the dead OpenRouter key onto the **Anthropic API directly** (Claude Sonnet 4.6, text + photo), and the `physiq-api` proxy is now **JWT-gated** (only signed-in users can spend AI). The in-app Gemini-key field is gone (keys are server-side).
-- **Next —** Ryan's phone smoke test (real OTP email, photo macros, PWA v6); re-engage the 3 stuck unconfirmed users (they auto-recover by requesting a code).
-- **Blockers / open —** Fix the broken `com.physiq.weight-sync` launchd job (points at a missing `sync-weights.sh`). Optionally retire the unused OpenRouter key + `gemini.js`.
+- **Now —** **Launched & shareable at https://ryanlarocca.github.io/physiq/.** Passwordless email-OTP login (6-digit code, no link); isolated per-user data (Supabase RLS by `user_id`); AI food logging (text + photo) on the **Anthropic API directly** (Claude Sonnet 4.6) behind a **JWT-gated** `physiq-api` proxy. **OTP email now sends via Gmail SMTP** (`ryan@lrghomes.com` app password; rate cap raised 2→30/hr) — the built-in Supabase email was capped at 2/hr and would have silently failed for real users. **Telegram login alerts** fire on every real login (gated `notify-login` endpoint → existing alerts bot). **Install-Physiq banner** guides iOS/Android users to add it to the home screen. SW at `v8`.
+- **Next —** Re-ping the 3 stuck testers (jan/chris/larry) — they can now log in via OTP. Optional later: a dedicated pretty domain (see below).
+- **Blockers / open —** Fix the broken `com.physiq.weight-sync` launchd job (points at a missing `sync-weights.sh`). **Custom domain deferred:** `physiq.lrghomes.com` needs a record in `lrghomes.com`'s Google Cloud DNS (no API access + Ryan didn't want to touch it); a dedicated domain via Vercel (where DNS would be CLI-managed) was offered — Ryan chose to keep the GitHub URL for now. Email is Gmail (good to ~2k/day); graduate to **Resend** if scaling (key already created; `send.lrghomes.com` registered, just needs DNS verification).
 
 ## 🔧 Ops scripts (`scripts/`, run from repo root)
 - `node scripts/backup-csv.mjs` — dump all Supabase data → `backups/` CSVs (gitignored)
