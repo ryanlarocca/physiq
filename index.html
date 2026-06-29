@@ -892,6 +892,42 @@
   </div>
 </div>
 
+<!-- Install / Add-to-Home-Screen helper (hidden until applicable; never shows when already installed) -->
+<div id="installBanner" style="display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:10000;background:#1a1a24;border:1px solid #2a2a3e;border-radius:14px;padding:11px 13px;box-shadow:0 8px 30px rgba(0,0,0,0.45);align-items:center;gap:11px;max-width:480px;margin:0 auto;">
+  <img src="icon-192.png" alt="" style="width:38px;height:38px;border-radius:9px;flex:0 0 auto"/>
+  <div style="flex:1 1 auto;min-width:0">
+    <div style="color:#fff;font-weight:700;font-size:14px;line-height:1.2">Install Physiq</div>
+    <div style="color:#9a9aae;font-size:12px;line-height:1.3" id="installBannerSub">Add it to your home screen for a full-screen app.</div>
+  </div>
+  <button id="installBtn" style="flex:0 0 auto;background:#6c63ff;color:#fff;border:none;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer">Install</button>
+  <button id="installDismiss" aria-label="Dismiss" style="flex:0 0 auto;background:none;border:none;color:#6a6a7e;font-size:22px;line-height:1;cursor:pointer;padding:0 2px">&times;</button>
+</div>
+
+<!-- iOS Safari instructions (no install API exists on iOS, so we guide the user) -->
+<div id="iosInstallSheet" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);align-items:flex-end;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#16161f;border-top-left-radius:18px;border-top-right-radius:18px;padding:22px 20px 30px;max-width:480px;width:100%;box-shadow:0 -8px 40px rgba(0,0,0,0.5)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <img src="icon-192.png" alt="" style="width:44px;height:44px;border-radius:10px"/>
+      <div>
+        <div style="color:#fff;font-weight:800;font-size:17px">Add Physiq to your Home Screen</div>
+        <div style="color:#9a9aae;font-size:13px">Two taps in Safari — no App Store needed.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:12px;margin:14px 0;color:#e8e8f0;font-size:14px;line-height:1.45">
+      <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#6c63ff;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">1</span>
+      <div>Tap the <b>Share</b> button
+        <svg viewBox="0 0 50 50" width="19" height="19" style="vertical-align:-4px;margin:0 1px" fill="none" stroke="#6c63ff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M25 5 v25 M16 14 l9 -9 9 9"/><path d="M15 21 H10 a4 4 0 0 0 -4 4 V41 a4 4 0 0 0 4 4 H40 a4 4 0 0 0 4 -4 V25 a4 4 0 0 0 -4 -4 H35"/></svg>
+        in Safari's toolbar.</div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:12px;margin:14px 0;color:#e8e8f0;font-size:14px;line-height:1.45">
+      <span style="flex:0 0 26px;height:26px;border-radius:50%;background:#6c63ff;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">2</span>
+      <div>Scroll down, tap <b>&ldquo;Add to Home Screen,&rdquo;</b> then <b>Add</b>.</div>
+    </div>
+    <div style="color:#6a6a7e;font-size:11.5px;line-height:1.4;margin-top:6px">No Share button? Open this page in <b>Safari</b> first (not an in-app browser).</div>
+    <button onclick="document.getElementById('iosInstallSheet').style.display='none'" style="width:100%;margin-top:16px;background:#26263a;color:#cfcfe0;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:700;cursor:pointer">Got it</button>
+  </div>
+</div>
+
 <header>
   <div class="logo-img-wrap">
     <img id="headerLogo" src="" style="height:44px;width:auto;display:block;" alt="Physiq" />
@@ -3286,6 +3322,56 @@ renderMacrosView();
 renderLogView().catch(e => console.error('Error initializing log view:', e));
 // Load quick-add presets from localStorage immediately (Supabase sync happens after login)
 loadQuickAddPresets().catch(() => {});
+
+// ── Install / Add-to-Home-Screen helper ──────────────────────────────────
+// iOS Safari has NO install API, so we show instructions; Android/Chromium gets
+// a real one-tap install via beforeinstallprompt. Hidden when already installed.
+(function initInstallHelper() {
+  try {
+    const DISMISS_KEY = 'physiq_install_dismissed_v1';
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone || localStorage.getItem(DISMISS_KEY)) return; // installed or user said no
+
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const banner = document.getElementById('installBanner');
+    const btn    = document.getElementById('installBtn');
+    const sub    = document.getElementById('installBannerSub');
+    if (!banner || !btn) return;
+    let deferredPrompt = null;
+    const hide = (remember) => { banner.style.display = 'none'; if (remember) localStorage.setItem(DISMISS_KEY, '1'); };
+
+    document.getElementById('installDismiss').onclick = () => hide(true);
+
+    btn.addEventListener('click', async () => {
+      if (deferredPrompt) {                       // Android/Chromium: real install
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        if (outcome === 'accepted') hide(true);
+      } else if (isIOS) {                         // iOS Safari: show how-to
+        document.getElementById('iosInstallSheet').style.display = 'flex';
+      }
+    });
+
+    // Android/desktop Chromium fires this when the app is installable → one-tap button
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      btn.textContent = 'Install';
+      sub.textContent = 'Add it to your home screen for a full-screen app.';
+      banner.style.display = 'flex';
+    });
+    window.addEventListener('appinstalled', () => hide(true));
+
+    // iOS Safari: no event ever fires — show the guided button shortly after load
+    if (isIOS) {
+      btn.textContent = 'Add';
+      sub.textContent = 'Tap “Add” for a full-screen, app-like Physiq.';
+      setTimeout(() => { banner.style.display = 'flex'; }, 1500);
+    }
+  } catch (e) { /* never let the install helper break the app */ }
+})();
 
 // Initialize auth + load data
 initSupabase();
