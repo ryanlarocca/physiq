@@ -1,16 +1,17 @@
 // Physiq — Service Worker with cache versioning (Safari PWA fix)
 // Version string for cache busting
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = `physiq-${CACHE_VERSION}`;
 
-// Cache strategy: stale-while-revalidate for assets, network-first for API/data
+// Relative paths so precache works under BOTH /physiq/ (GitHub Pages) and the
+// custom-domain root (physiq.lrghomes.com). Root-absolute paths 404'd under /physiq/.
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/sw.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  './',
+  './index.html',
+  './sw.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', event => {

@@ -3086,6 +3086,17 @@ async function authSignOut() {
   location.reload();
 }
 
+// Fire a Telegram alert to Ryan when a user logs in. Non-blocking — login UX never
+// waits on or fails because of this. Server uses the verified token's email.
+function notifyLogin() {
+  try {
+    fetch('https://physiq-api.vercel.app/api/notify-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (_sbJwt || '') },
+    }).catch(() => {});
+  } catch (e) { /* ignore */ }
+}
+
 // NOTE: the old migrateUnownedData() was removed. It claimed any user_id IS NULL
 // rows for whoever logged in next — a cross-user data-leak risk on a shared link.
 // All existing data is already owned, and RLS hides null-user rows from everyone,
@@ -3139,6 +3150,7 @@ async function initSupabase() {
       _currentUserId = session.user.id;
       _currentUserEmail = session.user.email;
       _sbJwt = session.access_token;
+      notifyLogin(); // fire a Telegram alert (non-blocking)
       document.getElementById('authOverlay').style.display = 'none';
       await loadAppData(session.user);
     } else if (event === 'TOKEN_REFRESHED' && session?.access_token) {
