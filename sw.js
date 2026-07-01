@@ -1,6 +1,6 @@
 // Physiq — Service Worker with cache versioning (Safari PWA fix)
 // Version string for cache busting
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const CACHE_NAME = `physiq-${CACHE_VERSION}`;
 
 // Relative paths so precache works under BOTH /physiq/ (GitHub Pages) and the

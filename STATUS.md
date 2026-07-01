@@ -1,12 +1,13 @@
 # Physiq – Status
 
-**Last Updated:** June 29, 2026  
+**Last Updated:** July 1, 2026  
 **Status:** ✅ LIVE at https://ryanlarocca.github.io/physiq/  
 **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
 ## 📍 Where we left off
 - **Now —** **Launched & shareable at https://ryanlarocca.github.io/physiq/.** Passwordless email-OTP login (6-digit code, no link); isolated per-user data (Supabase RLS by `user_id`); AI food logging (text + photo) on the **Anthropic API directly** (Claude Sonnet 4.6) behind a **JWT-gated** `physiq-api` proxy. **OTP email now sends via Gmail SMTP** (`ryan@lrghomes.com` app password; rate cap raised 2→30/hr) — the built-in Supabase email was capped at 2/hr and would have silently failed for real users. **Telegram login alerts** fire on every real login (gated `notify-login` endpoint → existing alerts bot). **Install-Physiq banner** guides iOS/Android users to add it to the home screen. SW at `v8`.
-- **Next —** Re-ping the 3 stuck testers (jan/chris/larry) — they can now log in via OTP. Optional later: a dedicated pretty domain (see below).
+- **🏋️ Gym Tracker (LIVE in the app, gated to Ryan) —** Shipped into `index.html` behind a `GYM_BETA_USERS` allowlist (Ryan's id only). The 🏋️ nav tab appears for him alone; all other users see no change (RLS + `authenticated`-only grants keep data isolated). Strength cards (PR + e1RM sparkline) · log w/ voice · top voice quick-log · Cardio · **Stats** (DOTS + relative-strength tiers + strength-vs-bodyweight chart). Reads its data via `sbFetch` under the user's JWT. Verified `scripts/test-gym.mjs` 11/11. SW `v9`. See CHANGELOG 2026-07-01.
+- **Next —** Re-ping the 3 stuck testers (jan/chris/larry) — they can now log in via OTP. **Gym Tracker:** Ryan does critical testing on his phone; to add testers, drop their id into `GYM_BETA_USERS` (or build a `user_features` table for no-redeploy toggles). Optional later: a dedicated pretty domain (see below).
 - **Blockers / open —** Fix the broken `com.physiq.weight-sync` launchd job (points at a missing `sync-weights.sh`). **Custom domain deferred:** `physiq.lrghomes.com` needs a record in `lrghomes.com`'s Google Cloud DNS (no API access + Ryan didn't want to touch it); a dedicated domain via Vercel (where DNS would be CLI-managed) was offered — Ryan chose to keep the GitHub URL for now. Email is Gmail (good to ~2k/day); graduate to **Resend** if scaling (key already created; `send.lrghomes.com` registered, just needs DNS verification).
 
 ## 🔧 Ops scripts (`scripts/`, run from repo root)

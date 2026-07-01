@@ -842,6 +842,59 @@
     }
     .signout-btn:hover { background: rgba(255,107,107,0.08); }
   </style>
+<style>
+  /* ── Gym Tracker (beta) ── */
+  #gymRoot { display: flex; flex-direction: column; gap: 14px; }
+  .gym-voicebar { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 12px; }
+  .gym-mic { flex: none; width: 46px; height: 46px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; cursor: pointer; background: var(--accent); color: #fff; transition: transform .1s, background .2s; }
+  .gym-mic.small { width: 42px; height: 42px; font-size: 1.15rem; }
+  .gym-mic:disabled { background: var(--card2); color: var(--muted); cursor: not-allowed; }
+  .gym-mic.listening { background: var(--red); animation: gymPulse 1s infinite; }
+  @keyframes gymPulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+  .gym-voicebar .gym-vb-text { flex: 1; min-width: 0; font-size: .9rem; color: var(--muted); }
+  .gym-voicebar .gym-vb-text .em { color: var(--text); font-weight: 600; }
+  .gym-tabs { display: flex; gap: 8px; }
+  .gym-tab { flex: 1; padding: 9px; border-radius: 12px; border: none; background: var(--card2); color: var(--muted); font-size: .85rem; font-weight: 600; cursor: pointer; }
+  .gym-tab.active { background: var(--accent); color: #fff; }
+  .gym-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media(min-width:520px){ .gym-grid { grid-template-columns: 1fr 1fr; } }
+  .gym-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 8px; color: var(--text); }
+  .gym-card:active { border-color: var(--accent); }
+  .gym-card h4 { margin: 0; font-size: 1rem; font-weight: 700; }
+  .gym-pr-pill { font-size: .7rem; font-weight: 700; color: #1a1a24; background: var(--yellow); border-radius: 999px; padding: 2px 8px; }
+  .gym-row-muted { font-size: .82rem; color: var(--muted); }
+  .gym-row-main { font-size: .9rem; color: var(--text); }
+  .gym-add-btn { align-self: flex-start; background: none; border: none; color: var(--muted); font-size: .85rem; cursor: pointer; padding: 4px 0; }
+  .gym-list { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .gym-list-item { background: var(--card); padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .gym-list-item:last-child { border-bottom: none; }
+  .gym-hero { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; display: flex; align-items: center; justify-content: space-between; }
+  .gym-hero .num { font-size: 2rem; font-weight: 800; line-height: 1; }
+  .gym-hero .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .gym-tier { font-size: .82rem; font-weight: 700; border-radius: 999px; padding: 4px 12px; }
+  .gym-section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .gym-section > .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 12px; }
+  .gym-bar { height: 6px; background: var(--card2); border-radius: 999px; overflow: hidden; margin: 4px 0; }
+  .gym-bar > div { height: 100%; border-radius: 999px; }
+  .gym-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+  @media(min-width:520px){ .gym-overlay { align-items: center; } }
+  .gym-sheet { width: 100%; max-width: 440px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  @media(min-width:520px){ .gym-sheet { border-radius: 20px; } }
+  .gym-sheet h3 { margin: 0; font-size: 1.15rem; }
+  .gym-inputs { display: flex; align-items: flex-end; gap: 10px; }
+  .gym-field { flex: 1; }
+  .gym-field label { display: block; font-size: .72rem; color: var(--muted); margin-bottom: 5px; }
+  .gym-field input, .gym-field select { width: 100%; box-sizing: border-box; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: var(--text); font-size: 1rem; text-align: center; }
+  .gym-field.wide input { text-align: left; }
+  .gym-btns { display: flex; gap: 10px; }
+  .gym-btns button { flex: 1; padding: 13px; border-radius: 12px; border: none; font-size: .95rem; font-weight: 700; cursor: pointer; }
+  .gym-btn-cancel { background: var(--card2); color: var(--text); }
+  .gym-btn-save { background: var(--yellow); color: #1a1a24; }
+  .gym-heard { font-size: .78rem; color: var(--muted); }
+  .gym-err { font-size: .8rem; color: var(--red); }
+  .gym-empty { text-align: center; color: var(--muted); font-size: .9rem; padding: 32px 8px; }
+  .gym-skel { height: 120px; background: var(--card2); border-radius: 14px; animation: gymPulse 1.2s infinite; }
+</style>
 </head>
 <body>
 
@@ -948,6 +1001,11 @@
   <button class="nav-btn" onclick="showView('data', this)">
     <span class="nav-icon">📊</span>
     <span class="nav-label">Data</span>
+  </button>
+  <!-- Gym: hidden by default; setupGymTab() reveals it only for allowlisted users (GYM_BETA_USERS) -->
+  <button class="nav-btn" id="navGymBtn" style="display:none;" onclick="showView('gym', this)">
+    <span class="nav-icon">🏋️</span>
+    <span class="nav-label">Gym</span>
   </button>
 </nav>
 
@@ -1385,6 +1443,11 @@ CREATE INDEX IF NOT EXISTS idx_macro_user ON macro_entries(user_id);</pre>
 
   </div><!-- end data view -->
 
+  <!-- Gym Tracker (beta, allowlisted). Rendered entirely by renderGymView() into #gymRoot. -->
+  <div class="view" id="view-gym">
+    <div id="gymRoot"></div>
+  </div>
+
 </div><!-- end container -->
 
 <script id="logo-data">
@@ -1467,6 +1530,7 @@ function showView(name, btn) {
   if (name === 'weight') { renderWeightView(); }
   if (name === 'macros') { renderMacrosView(); renderLogView().catch(() => {}); }
   if (name === 'data')   { renderWeightView(); renderMacrosView(); }
+  if (name === 'gym')    { renderGymView(); }
 }
 
 function updateNavIndicator(activeBtn) {
@@ -3169,6 +3233,9 @@ async function initSupabase() {
       _dbReady = false;
       _weightCache = [];
       _macroCache  = [];
+      // reset gym beta state + hide its tab
+      gymState.loaded = false; gymState.exercises = []; gymState.sets = []; gymState.cardio = [];
+      const gbtn = document.getElementById('navGymBtn'); if (gbtn) gbtn.style.display = 'none';
     }
   });
 
@@ -3276,6 +3343,9 @@ async function loadAppData(user) {
     renderLogView().catch(() => {});
     // Load quick-add presets
     loadQuickAddPresets().catch(e => console.warn('[presets] Load error:', e));
+
+    // Gym Tracker (beta): reveal + preload only for allowlisted users
+    setupGymTab().catch(e => console.warn('[gym] setup error:', e));
 
   } catch(e) {
     console.error('[supabase] Init error:', e);
@@ -3470,6 +3540,149 @@ async function submitBugReport() {
 <script>
 // Physiq logo (base64 embedded)
 // This is set separately to keep main script readable
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   GYM TRACKER (beta) — gated to GYM_BETA_USERS only. Vanilla port of the
+   Mission Control prototype. Reads/writes gym_exercises / gym_sets / gym_cardio
+   directly via sbFetch (RLS scopes every row to auth.uid()). Bodyweight for the
+   stats comes from the already-loaded _weightCache.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const GYM_BETA_USERS = ['59933c83-cb2e-4e87-87bb-12a1bf1f4ac3'];
+function gymEnabled(){ return _currentUserId && GYM_BETA_USERS.includes(_currentUserId); }
+
+const gymState = { tab:'strength', exercises:[], sets:[], cardio:[], loaded:false, loading:false };
+const gymVoice = { listening:false, heard:null, draft:null, problem:null };
+let gymRec = null, gymChartInst = null;
+
+// Called from loadAppData after auth. Reveals the tab + preloads only for the allowlist.
+async function setupGymTab(){
+  const btn = document.getElementById('navGymBtn');
+  if(!gymEnabled()){ if(btn) btn.style.display='none'; return; }
+  if(btn) btn.style.display='flex';
+  try{ await gymLoadStrength(); }catch(e){ console.warn('[gym] preload', e); }
+}
+
+// ── pure helpers ──
+function gymE1rm(w,r){ return w*(1+r/30); }
+function gymTrim(n){ return Number.isInteger(n)?String(n):String(Number(Number(n).toFixed(2))); }
+function gymLoad(w,r){ return gymTrim(w)+' × '+gymTrim(r); }
+function gymShortDate(d){ const a=d.split('-').map(Number); return new Date(a[0],a[1]-1,a[2]).toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+function gymToday(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function gymEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function gymTitle(s){ return s.replace(/\b\w/g,c=>c.toUpperCase()); }
+function gymGetSR(){ return window.SpeechRecognition||window.webkitSpeechRecognition||null; }
+
+// strength standards (×bodyweight to enter each tier, male, approx)
+const GYM_STD={bench:[0.75,1,1.25,1.5,2],squat:[1,1.25,1.5,2,2.5],deadlift:[1.25,1.5,1.75,2.25,2.75],ohp:[0.5,0.65,0.8,1,1.25]};
+const GYM_TIERS=['Beginner','Novice','Intermediate','Advanced','Elite'];
+const GYM_TIER_COLOR={Beginner:'#8888aa',Novice:'#4dabf7',Intermediate:'#43e97b',Advanced:'#ffd166',Elite:'#e879f9'};
+function gymStdKey(name){ const n=name.toLowerCase(); if(n.includes('deadlift'))return'deadlift'; if(n.includes('squat'))return'squat'; if(n.includes('bench'))return'bench'; if(n.includes('shoulder')||n.includes('overhead')||n.includes('ohp'))return'ohp'; return null; }
+function gymRelStrength(key,e1,bw){ const th=GYM_STD[key]; const ratio=e1/bw; let a=-1; th.forEach((t,i)=>{if(ratio>=t)a=i;}); const ti=Math.max(0,a); const ni=a+1; const next=ni<=th.length-1?GYM_TIERS[ni]:null; const floor=a>=0?th[a]:0; const ceil=ni<=th.length-1?th[ni]:th[th.length-1]; const prog=next?Math.max(0,Math.min(1,(ratio-floor)/(ceil-floor))):1; return {ratio,tier:GYM_TIERS[ti],tierIndex:ti,nextTier:next,progressToNext:prog}; }
+const GYM_LB_PER_KG=2.2046226218; function gymKg(l){ return l/GYM_LB_PER_KG; }
+function gymDots(totKg,bwKg){ const bw=bwKg; const d=-0.000001093*Math.pow(bw,4)+0.0007391293*Math.pow(bw,3)-0.1918759221*Math.pow(bw,2)+24.0900756*bw-307.75076; return d===0?0:totKg*500/d; }
+function gymBodyweightOn(date){ if(!_weightCache.length)return null; let res=null; for(const p of _weightCache){ if(p.date<=date)res=p.weight; else break; } return res!=null?res:_weightCache[0].weight; }
+function gymCurrentBw(){ return _weightCache.length?_weightCache[_weightCache.length-1].weight:null; }
+
+// ── voice number parsing ──
+const GYM_ONES={zero:0,oh:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+const GYM_TENS={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+function gymWordsToNum(words){ if(!words.length)return null; let total=0,cur=0,any=false; for(const w of words){ if(w==='hundred'){cur=(cur||1)*100;any=true;} else if(w in GYM_TENS){cur+=GYM_TENS[w];any=true;} else if(w in GYM_ONES){cur+=GYM_ONES[w];any=true;} else if(w==='and'){continue;} else {return any?total+cur:null;} } return any?total+cur:null; }
+function gymSpokenWeight(words){ const d=gymWordsToNum(words); if(words.length>=2&&(words[0]in GYM_ONES)&&GYM_ONES[words[0]]<=9){ const rest=words.slice(1); const rv=gymWordsToNum(rest); if(rv!=null&&rv<100&&words.indexOf('hundred')<0)return GYM_ONES[words[0]]*100+rv; } return d; }
+function gymSpokenReps(s){ const t=s.toLowerCase().replace(/\breps?\b/g,' ').trim(); const num=t.match(/\d+(?:\.\d+)?/); let base=num?parseFloat(num[0]):null; const FR={quarter:0.25,half:0.5}; for(const k in FR){ if(t.indexOf(k)>=0){ if(base==null)base=0; base+=FR[k]; } } if(base!=null)return base; const pi=t.indexOf('point'); if(pi>=0){ const whole=gymWordsToNum(t.slice(0,pi).split(/[\s-]+/).filter(Boolean)); const dd=t.slice(pi+5).split(/[\s-]+/).filter(Boolean).map(w=>GYM_ONES[w]).filter(x=>x!=null); if(whole!=null&&dd.length)return parseFloat(whole+'.'+dd.join('')); } return gymWordsToNum(t.split(/[\s-]+/).filter(Boolean)); }
+function gymParseSet(transcript){ const raw=transcript.trim(); const lower=raw.toLowerCase(); const r={raw}; const nm=lower.match(/(\d+(?:\.\d+)?)\s*(?:for|by|times|x|×|@)\s*(\d+(?:\.\d+)?)/); if(nm){ r.weight=parseFloat(nm[1]); r.reps=parseFloat(nm[2]); } else { const conn=lower.match(/\b(for|by|times)\b/); if(conn){ const idx=lower.indexOf(conn[0]); const lw=lower.slice(0,idx).split(/[\s-]+/).filter(Boolean); const w=gymSpokenWeight(lw); if(w!=null)r.weight=w; const reps=gymSpokenReps(lower.slice(idx+conn[0].length)); if(reps!=null)r.reps=reps; } } const comma=raw.indexOf(','); if(comma>=0){ const a=raw.slice(comma+1).trim(); if(a)r.notes=a; } return r; }
+function gymParseQuickLog(transcript){ const base=gymParseSet(transcript); const raw=transcript.trim(); const dm=raw.match(/\d/); let ex=''; if(dm&&dm.index>0)ex=raw.slice(0,dm.index).trim().replace(/[,;]+$/,''); base.exerciseText=ex; return base; }
+function gymMatchExercise(spoken){ const norm=s=>s.toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); const target=norm(spoken); if(!target)return null; const tt={}; target.split(' ').filter(Boolean).forEach(t=>tt[t]=1); let best=null,bs=0; for(const c of gymState.exercises){ if(c.category!=='strength')continue; const name=norm(c.name); let score=0; if(name===target)score=100; else if(name.indexOf(target)>=0||target.indexOf(name)>=0)score=50; for(const tok of name.split(' ').filter(Boolean)){ if(tt[tok])score+=10; else if(tok.length>=4&&target.indexOf(tok)>=0)score+=6; } if(score>bs){bs=score;best=c;} } return bs>=10?best:null; }
+
+// ── data ──
+async function gymLoadStrength(){
+  gymState.loading=true;
+  const [ex,sets]=await Promise.all([
+    sbFetch('gym_exercises',{ filters:{ category:{op:'eq',val:'strength'} }, order:{col:'name',ascending:true} }),
+    sbFetch('gym_sets',{ order:{col:'date',ascending:true} })
+  ]);
+  gymState.exercises=(ex||[]).map(e=>({id:e.id,name:e.name,category:e.category}));
+  gymState.sets=(sets||[]).map(s=>({id:s.id,exercise_id:s.exercise_id,date:s.date,weight_lbs:Number(s.weight_lbs),reps:Number(s.reps),notes:s.notes,is_pr:s.is_pr}));
+  gymState.loaded=true; gymState.loading=false;
+  const v=document.getElementById('view-gym');
+  if(v&&v.classList.contains('active')) renderGymView();
+}
+async function gymAddExerciseApi(name,category){ const rows=await sbFetch('gym_exercises',{method:'POST',body:{user_id:_currentUserId,name:name.trim(),category:category}}); return Array.isArray(rows)?rows[0]:rows; }
+async function gymLogSetApi(o){ let best=-Infinity; for(const s of gymState.sets){ if(s.exercise_id===o.exerciseId) best=Math.max(best,gymE1rm(s.weight_lbs,s.reps)); } const isNewPr=gymE1rm(o.weight,o.reps)>best; await sbFetch('gym_sets',{method:'POST',body:{user_id:_currentUserId,exercise_id:o.exerciseId,date:o.date,weight_lbs:o.weight,reps:o.reps,notes:o.notes||null,is_pr:isNewPr}}); return {isNewPr:isNewPr}; }
+
+function gymBuildCards(){
+  const byEx={}; for(const s of gymState.sets){ (byEx[s.exercise_id]=byEx[s.exercise_id]||[]).push(s); }
+  const cards=gymState.exercises.map(ex=>{
+    const sets=(byEx[ex.id]||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
+    const last=sets.length?sets[sets.length-1]:null;
+    let pr=null,best=-Infinity; for(const s of sets){ const sc=gymE1rm(s.weight_lbs,s.reps); if(sc>best){best=sc;pr=s;} }
+    const byDay={}; for(const s of sets){ const sc=gymE1rm(s.weight_lbs,s.reps); byDay[s.date]=Math.max(byDay[s.date]||0,sc); }
+    const days=Object.keys(byDay).sort(); const spark=days.slice(-10).map(d=>byDay[d]);
+    return {id:ex.id,name:ex.name,last:last,pr:pr,spark:spark,sessions:days.length};
+  });
+  cards.sort((a,b)=>((b.last?b.last.date:'')).localeCompare(a.last?a.last.date:''));
+  return cards;
+}
+
+// ── render ──
+function gymSetTab(t){ gymState.tab=t; renderGymView(); }
+function renderGymView(){
+  const root=document.getElementById('gymRoot'); if(!root)return;
+  if(!gymState.loaded){ root.innerHTML='<div class="gym-grid"><div class="gym-skel"></div><div class="gym-skel"></div></div>'; if(!gymState.loading) gymLoadStrength().catch(()=>{}); return; }
+  const cards=gymBuildCards();
+  let h=gymVoiceBarHtml();
+  h+='<div class="gym-tabs">'+['strength','cardio','stats'].map(t=>`<button class="gym-tab ${gymState.tab===t?'active':''}" onclick="gymSetTab('${t}')">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')+'</div>';
+  if(gymState.tab==='strength') h+=gymStrengthHtml(cards);
+  else if(gymState.tab==='cardio') h+='<div id="gymCardioBox">'+gymCardioHtml()+'</div>';
+  else h+='<div id="gymStatsBox"><div class="gym-skel"></div></div>';
+  root.innerHTML=h;
+  if(gymState.tab==='cardio') gymLoadCardio();
+  if(gymState.tab==='stats') gymRenderStats();
+}
+function gymSparkSvg(spark){ const W=110,H=26,p=2; if(spark.length<2) return `<svg width="${W}" height="${H}"><line x1="${p}" y1="${H/2}" x2="${W-p}" y2="${H/2}" stroke="#2e2e42" stroke-width="1.5" stroke-dasharray="3 3"/></svg>`; const min=Math.min.apply(null,spark),max=Math.max.apply(null,spark),span=(max-min)||1; const pts=spark.map((v,i)=>[p+i/(spark.length-1)*(W-2*p),p+(H-2*p)-((v-min)/span)*(H-2*p)]); const d=pts.map((pt,i)=>(i?'L':'M')+pt[0].toFixed(1)+' '+pt[1].toFixed(1)).join(' '); const last=pts[pts.length-1]; return `<svg width="${W}" height="${H}"><path d="${d}" fill="none" stroke="#ffd166" stroke-width="1.75" stroke-linejoin="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2" fill="#ffd166"/></svg>`; }
+function gymStrengthHtml(cards){ if(!cards.length) return '<div class="gym-empty">No exercises yet. Use the mic or + to add one.</div>'; let h='<div class="gym-grid">'; for(const c of cards){ h+=`<button class="gym-card" onclick="gymOpenLog('${c.id}')"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h4>${gymEsc(c.name)}</h4>${c.pr?`<span class="gym-pr-pill">🏆 ${gymLoad(c.pr.weight_lbs,c.pr.reps)}</span>`:''}</div><div class="gym-row-main">${c.last?gymLoad(c.last.weight_lbs,c.last.reps)+' <span class="gym-row-muted">· '+gymShortDate(c.last.date)+'</span>':'<span class="gym-row-muted">No sets yet</span>'}</div>${c.pr?`<div class="gym-row-muted">🏆 ${gymLoad(c.pr.weight_lbs,c.pr.reps)} · ${gymShortDate(c.pr.date)}</div>`:''}<div style="display:flex;justify-content:space-between;align-items:center">${gymSparkSvg(c.spark)}<span class="gym-row-muted" style="font-size:.68rem">${c.sessions} sessions</span></div></button>`; } h+='</div><button class="gym-add-btn" onclick="gymOpenAddExercise()">+ Add Exercise</button>'; return h; }
+
+// ── voice quick-log bar ──
+function gymVoiceBarHtml(){
+  const supported=!!gymGetSR();
+  let mid;
+  if(gymVoice.listening) mid='<div class="gym-vb-text">Listening… say “bench press 225 for 5”</div>';
+  else if(gymVoice.draft){ const d=gymVoice.draft; mid=`<div class="gym-vb-text">${d.needsCreate?'<span style="color:var(--yellow)">new · </span>':''}<span class="em">${gymEsc(d.exerciseName)}</span> · ${gymTrim(d.weight)} × ${gymTrim(d.reps)}${d.notes?' · '+gymEsc(d.notes):''}</div>`; }
+  else if(gymVoice.problem) mid=`<div class="gym-vb-text" style="color:var(--red)">${gymEsc(gymVoice.problem)}</div>`;
+  else mid='<div class="gym-vb-text">'+(gymVoice.heard?('Heard: “'+gymEsc(gymVoice.heard)+'”'):'Quick-log a set by voice')+'</div>';
+  let right='';
+  if(gymVoice.draft) right=`<button class="gym-mic small" style="background:var(--card2);color:var(--text)" onclick="gymVoiceCancel()">✕</button><button class="gym-mic small" style="width:auto;padding:0 14px;border-radius:12px;background:var(--yellow);color:#1a1a24;font-size:.82rem;font-weight:700" onclick="gymVoiceConfirm()">${gymVoice.draft.needsCreate?'Create & Log':'Log'}</button>`;
+  return `<div class="gym-voicebar"><button class="gym-mic ${gymVoice.listening?'listening':''}" ${supported?'':'disabled'} onclick="gymVoiceToggle()">🎤</button>${mid}${right}</div>`;
+}
+function gymVoiceToggle(){ if(gymVoice.listening){ try{gymRec&&gymRec.stop();}catch(e){} gymVoice.listening=false; renderGymView(); return; } const SR=gymGetSR(); if(!SR)return; gymVoice.draft=null; gymVoice.problem=null; gymVoice.heard=null; const rec=new SR(); rec.lang='en-US'; rec.continuous=false; rec.interimResults=false; rec.maxAlternatives=1; rec.onresult=e=>gymVoiceHandle(e.results[0][0].transcript); rec.onerror=()=>{gymVoice.listening=false;renderGymView();}; rec.onend=()=>{ if(gymVoice.listening){gymVoice.listening=false;renderGymView();} }; gymRec=rec; gymVoice.listening=true; renderGymView(); rec.start(); setTimeout(()=>{try{rec.stop();}catch(e){}},5000); }
+function gymVoiceHandle(tr){ gymVoice.listening=false; gymVoice.heard=tr; const p=gymParseQuickLog(tr); if(p.weight==null||p.reps==null){ gymVoice.problem='Couldn’t catch weight & reps — try “bench press 225 for 5”.'; renderGymView(); return; } if(!p.exerciseText){ gymVoice.problem='Couldn’t catch the exercise — say its name first.'; renderGymView(); return; } const m=gymMatchExercise(p.exerciseText); gymVoice.draft={exerciseId:m?m.id:null,exerciseName:m?m.name:gymTitle(p.exerciseText),weight:p.weight,reps:p.reps,notes:p.notes||null,needsCreate:!m}; renderGymView(); }
+function gymVoiceCancel(){ gymVoice.draft=null; gymVoice.problem=null; gymVoice.heard=null; renderGymView(); }
+async function gymVoiceConfirm(){ const d=gymVoice.draft; if(!d)return; try{ let exId=d.exerciseId; if(!exId){ const row=await gymAddExerciseApi(d.exerciseName,'strength'); exId=row.id; } const res=await gymLogSetApi({exerciseId:exId,date:gymToday(),weight:d.weight,reps:d.reps,notes:d.notes}); gymVoice.draft=null; gymVoice.heard=null; showToast(res.isNewPr?('🏆 New PR — '+d.exerciseName+'!'):('Logged · '+d.exerciseName)); await gymLoadStrength(); }catch(e){ gymVoice.problem=e.message||'Could not log'; renderGymView(); } }
+
+// ── log-set + add-exercise sheets ──
+function gymShowSheet(inner){ gymCloseSheet(); const ov=document.createElement('div'); ov.className='gym-overlay'; ov.id='gymOverlay'; ov.onclick=e=>{ if(e.target===ov) gymCloseSheet(); }; const sh=document.createElement('div'); sh.className='gym-sheet'; sh.innerHTML=inner; ov.appendChild(sh); document.body.appendChild(ov); }
+function gymCloseSheet(){ const o=document.getElementById('gymOverlay'); if(o)o.remove(); }
+function gymOpenLog(exId){ const ex=gymState.exercises.find(e=>e.id===exId); if(!ex)return; const sets=gymState.sets.filter(s=>s.exercise_id===exId); let pr=null,best=-Infinity; for(const s of sets){ const sc=gymE1rm(s.weight_lbs,s.reps); if(sc>best){best=sc;pr=s;} } const supported=!!gymGetSR(); gymShowSheet(`<h3>${gymEsc(ex.name)}</h3>${pr?`<div style="color:var(--yellow);font-size:.8rem;margin-top:-8px">PR: ${gymLoad(pr.weight_lbs,pr.reps)}</div>`:''}<div class="gym-inputs"><div class="gym-field"><label>Weight (lbs)</label><input id="gymW" inputmode="decimal" placeholder="225"></div><button class="gym-mic small" id="gymModalMic" ${supported?'':'disabled'} onclick="gymModalVoice()">🎤</button><div class="gym-field"><label>Reps</label><input id="gymR" inputmode="decimal" placeholder="5"></div></div><div id="gymModalHeard" class="gym-heard"></div><div style="display:flex;gap:10px"><div class="gym-field"><label>Date</label><input id="gymD" type="date" value="${gymToday()}"></div><div class="gym-field wide"><label>Notes</label><input id="gymN" placeholder="fatigued"></div></div><div id="gymModalErr" class="gym-err"></div><div class="gym-btns"><button class="gym-btn-cancel" onclick="gymCloseSheet()">Cancel</button><button class="gym-btn-save" onclick="gymSaveLog('${exId}')">Save</button></div>`); setTimeout(()=>{ const w=document.getElementById('gymW'); if(w)w.focus(); },60); }
+function gymModalVoice(){ const SR=gymGetSR(); if(!SR)return; const mic=document.getElementById('gymModalMic'); if(mic)mic.classList.add('listening'); const rec=new SR(); rec.lang='en-US'; rec.continuous=false; rec.interimResults=false; rec.maxAlternatives=1; rec.onresult=e=>{ const t=e.results[0][0].transcript; const p=gymParseSet(t); if(p.weight!=null)document.getElementById('gymW').value=p.weight; if(p.reps!=null)document.getElementById('gymR').value=p.reps; if(p.notes)document.getElementById('gymN').value=p.notes; const h=document.getElementById('gymModalHeard'); if(h)h.textContent='Heard: “'+t+'”'; }; rec.onerror=()=>{if(mic)mic.classList.remove('listening');}; rec.onend=()=>{if(mic)mic.classList.remove('listening');}; rec.start(); setTimeout(()=>{try{rec.stop();}catch(e){}},5000); }
+async function gymSaveLog(exId){ const w=parseFloat(document.getElementById('gymW').value); const r=parseFloat(document.getElementById('gymR').value); const err=document.getElementById('gymModalErr'); if(!(w>0)){err.textContent='Enter a valid weight.';return;} if(!(r>0)){err.textContent='Enter valid reps.';return;} const date=document.getElementById('gymD').value||gymToday(); const notes=document.getElementById('gymN').value.trim(); try{ const res=await gymLogSetApi({exerciseId:exId,date:date,weight:w,reps:r,notes:notes}); gymCloseSheet(); showToast(res.isNewPr?'🏆 New PR!':'Set logged'); await gymLoadStrength(); }catch(e){ err.textContent=e.message||'Could not save'; } }
+function gymOpenAddExercise(){ gymShowSheet(`<h3>Add Exercise</h3><div class="gym-field wide"><label>Name</label><input id="gymExName" placeholder="Overhead Press"></div><div id="gymModalErr" class="gym-err"></div><div class="gym-btns"><button class="gym-btn-cancel" onclick="gymCloseSheet()">Cancel</button><button class="gym-btn-save" onclick="gymSaveExercise()">Add</button></div>`); setTimeout(()=>{ const n=document.getElementById('gymExName'); if(n)n.focus(); },60); }
+async function gymSaveExercise(){ const name=document.getElementById('gymExName').value.trim(); const err=document.getElementById('gymModalErr'); if(!name){err.textContent='Enter a name.';return;} try{ await gymAddExerciseApi(name,'strength'); gymCloseSheet(); await gymLoadStrength(); }catch(e){ err.textContent=/duplicate|unique/i.test(e.message||'')?'You already have that exercise.':(e.message||'Could not add'); } }
+
+// ── cardio ──
+async function gymLoadCardio(){ try{ const rows=await sbFetch('gym_cardio',{order:{col:'date',ascending:false}}); gymState.cardio=rows||[]; }catch(e){ gymState.cardio=[]; } const box=document.getElementById('gymCardioBox'); if(box)box.innerHTML=gymCardioHtml(); }
+function gymCardioHtml(){ let h='<button class="gym-add-btn" style="color:var(--accent)" onclick="gymOpenCardio()">+ Log Cardio</button>'; if(!gymState.cardio.length){ h+='<div class="gym-empty">No cardio logged yet. Tap + to add.</div>'; return h; } h+='<div class="gym-list">'; for(const c of gymState.cardio){ const parts=[]; if(c.duration_minutes!=null)parts.push(c.duration_minutes+' min'); if(c.speed_mph!=null)parts.push(c.speed_mph+' mph'); if(c.incline_pct!=null)parts.push(c.incline_pct+'% incline'); h+=`<div class="gym-list-item"><div style="display:flex;justify-content:space-between"><span style="font-weight:600">${gymEsc(c.exercise_name)}</span><span class="gym-row-muted">${gymShortDate(c.date)}</span></div>${parts.length?'<div class="gym-row-muted">'+parts.join(' · ')+'</div>':''}${c.notes?'<div class="gym-row-muted" style="font-size:.7rem">'+gymEsc(c.notes)+'</div>':''}</div>`; } h+='</div>'; return h; }
+function gymOpenCardio(){ gymShowSheet(`<h3>Log Cardio</h3><div class="gym-field wide"><label>Exercise</label><input id="gymCName" placeholder="Treadmill"></div><div style="display:flex;gap:10px"><div class="gym-field"><label>Min</label><input id="gymCDur" inputmode="decimal" placeholder="30"></div><div class="gym-field"><label>MPH</label><input id="gymCSpd" inputmode="decimal" placeholder="6.0"></div><div class="gym-field"><label>Incline%</label><input id="gymCInc" inputmode="decimal" placeholder="2.0"></div></div><div style="display:flex;gap:10px"><div class="gym-field"><label>Date</label><input id="gymCDate" type="date" value="${gymToday()}"></div><div class="gym-field wide"><label>Notes</label><input id="gymCNotes" placeholder="easy"></div></div><div id="gymModalErr" class="gym-err"></div><div class="gym-btns"><button class="gym-btn-cancel" onclick="gymCloseSheet()">Cancel</button><button class="gym-btn-save" onclick="gymSaveCardio()">Save</button></div>`); }
+async function gymSaveCardio(){ const name=document.getElementById('gymCName').value.trim(); const err=document.getElementById('gymModalErr'); if(!name){err.textContent='Enter an exercise name.';return;} const num=v=>{ v=(v||'').trim(); return v===''?null:Number(v); }; try{ await sbFetch('gym_cardio',{method:'POST',body:{user_id:_currentUserId,date:document.getElementById('gymCDate').value||gymToday(),exercise_name:name,duration_minutes:num(document.getElementById('gymCDur').value),speed_mph:num(document.getElementById('gymCSpd').value),incline_pct:num(document.getElementById('gymCInc').value),notes:document.getElementById('gymCNotes').value.trim()||null}}); gymCloseSheet(); await gymLoadCardio(); }catch(e){ err.textContent=e.message||'Could not save'; } }
+
+// ── stats ──
+function gymComputeStats(){ const bw=gymCurrentBw(); const byEx={}; for(const s of gymState.sets){ (byEx[s.exercise_id]=byEx[s.exercise_id]||[]).push(s); } const liftTiers=[]; for(const ex of gymState.exercises){ const key=gymStdKey(ex.name); if(!key)continue; const rows=byEx[ex.id]||[]; if(!rows.length||!bw)continue; let best=-Infinity,bs=null; for(const r of rows){ const sc=gymE1rm(r.weight_lbs,r.reps); if(sc>best){best=sc;bs=r;} } liftTiers.push({name:ex.name,key:key,e1rm:best,bestSet:bs,rel:gymRelStrength(key,best,bw)}); } const ord={squat:0,bench:1,deadlift:2,ohp:3}; liftTiers.sort((a,b)=>((ord[a.key]==null?9:ord[a.key])-(ord[b.key]==null?9:ord[b.key]))); const big3=liftTiers.filter(l=>l.key==='squat'||l.key==='bench'||l.key==='deadlift'); let overall=null; if(big3.length){ const idx=Math.round(big3.reduce((s,l)=>s+l.rel.tierIndex,0)/big3.length); overall={tier:GYM_TIERS[idx],tierIndex:idx}; } const b3=['squat','bench','deadlift']; const exKey={}; for(const ex of gymState.exercises){ const k=gymStdKey(ex.name); if(k&&b3.indexOf(k)>=0)exKey[ex.id]=k; } const dated=[]; for(const s of gymState.sets){ const k=exKey[s.exercise_id]; if(k)dated.push({date:s.date,key:k,e1rm:gymE1rm(s.weight_lbs,s.reps)}); } dated.sort((a,b)=>a.date.localeCompare(b.date)); const series=[]; const bestK={}; let lastDate=''; for(let i=0;i<dated.length;i++){ const d=dated[i]; bestK[d.key]=Math.max(bestK[d.key]||0,d.e1rm); const nx=dated[i+1]; if(nx&&nx.date===d.date)continue; if(d.date===lastDate)continue; if(!b3.every(k=>bestK[k]>0))continue; const w=gymBodyweightOn(d.date); if(w==null)continue; const tot=b3.reduce((s,k)=>s+bestK[k],0); series.push({date:d.date,dots:gymDots(gymKg(tot),gymKg(w)),bodyweight:w,total:tot}); lastDate=d.date; } const dotsCurrent=series.length?series[series.length-1].dots:null; return {bw:bw,liftTiers:liftTiers,overall:overall,dotsCurrent:dotsCurrent,series:series}; }
+function gymRenderStats(){ const box=document.getElementById('gymStatsBox'); if(!box)return; const st=gymComputeStats(); if(!st.bw){ box.innerHTML='<div class="gym-empty">Log your bodyweight in the Weight tab to unlock relative-strength stats.</div>'; return; } let h=`<div class="gym-hero"><div><div class="lbl">Strength Score (DOTS)</div><div class="num">${st.dotsCurrent!=null?Math.round(st.dotsCurrent):'—'}</div><div class="gym-row-muted" style="font-size:.7rem">at ${Math.round(st.bw)} lb</div></div>${st.overall?`<div style="text-align:right"><div class="lbl" style="margin-bottom:6px">Overall</div><span class="gym-tier" style="color:${GYM_TIER_COLOR[st.overall.tier]};background:${GYM_TIER_COLOR[st.overall.tier]}22">${st.overall.tier}</span></div>`:''}</div>`;
+  h+='<div class="gym-section"><div class="lbl">Relative Strength (× bodyweight)</div>'; if(!st.liftTiers.length)h+='<div class="gym-row-muted">Log a squat, bench, or deadlift to see tiers.</div>'; for(const l of st.liftTiers){ const c=GYM_TIER_COLOR[l.rel.tier]; const pct=((l.rel.tierIndex+l.rel.progressToNext)/(GYM_TIERS.length-1))*100; h+=`<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:.88rem">${gymEsc(l.name)}</span><span><b>${l.rel.ratio.toFixed(2)}×</b> <span class="gym-tier" style="color:${c};background:${c}22;font-size:.66rem;padding:2px 8px">${l.rel.tier}</span></span></div><div class="gym-bar"><div style="width:${pct}%;background:${c}"></div></div><div style="display:flex;justify-content:space-between" class="gym-row-muted"><span style="font-size:.66rem">${l.bestSet?'best '+gymLoad(l.bestSet.weight_lbs,l.bestSet.reps):''}</span>${l.rel.nextTier?`<span style="font-size:.66rem">${Math.round(l.rel.progressToNext*100)}% to ${l.rel.nextTier}</span>`:''}</div></div>`; } h+='</div>';
+  h+='<div class="gym-section"><div class="lbl">Strength vs Bodyweight</div>'+(st.series.length>=2?'<div style="height:170px;position:relative"><canvas id="gymStatsChart"></canvas></div><div class="gym-row-muted" style="font-size:.7rem;margin-top:8px">Strength (gold) holding or rising while bodyweight (purple) drops = recomping.</div>':'<div class="gym-row-muted">Need squat, bench &amp; deadlift history to chart this.</div>')+'</div>';
+  box.innerHTML=h;
+  if(st.series.length>=2) gymDrawChart(st.series);
+}
+function gymDrawChart(series){ const cv=document.getElementById('gymStatsChart'); if(!cv||typeof Chart==='undefined')return; if(gymChartInst){ gymChartInst.destroy(); gymChartInst=null; } const labels=series.map(p=>gymShortDate(p.date)); gymChartInst=new Chart(cv.getContext('2d'),{type:'line',data:{labels:labels,datasets:[{label:'Bodyweight',data:series.map(p=>p.bodyweight),borderColor:'#6c63ff',backgroundColor:'transparent',yAxisID:'y',tension:.3,pointRadius:0,borderWidth:2},{label:'DOTS',data:series.map(p=>p.dots),borderColor:'#ffd166',backgroundColor:'transparent',yAxisID:'y1',tension:.3,pointRadius:0,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#8888aa',boxWidth:10,font:{size:10}}}},scales:{x:{ticks:{color:'#8888aa',maxTicksLimit:5,font:{size:9}},grid:{display:false}},y:{position:'left',ticks:{color:'#6c63ff',font:{size:9}},grid:{color:'#2e2e42'}},y1:{position:'right',ticks:{color:'#ffd166',font:{size:9}},grid:{display:false}}}}}); }
 </script>
 </body>
 </html>
