@@ -1593,6 +1593,37 @@ let _dbReady = false;    // true once Supabase tables confirmed to exist
 let _currentUserId = null; // cached after login — avoids getUser() network calls on every insert
 let _currentUserEmail = null; // cached after login — used for bug reports
 let _sbJwt = null;       // current JWT for sbFetch REST calls (updated on sign-in + token refresh)
+let _writeGen = 0;       // bumped on every local write — a background refresh whose
+                         // response predates a write must not clobber the cache with it
+
+// ── Local data cache: last known-good weights+macros, per user ──────────────
+// Painted instantly on startup so opening the app never blanks on the network
+// (data lived in localStorage before the multi-user launch; this restores that
+// feel while Supabase stays the source of truth).
+const DATA_CACHE_KEY = 'physiq_data_cache_v1';
+
+function saveDataCache() {
+  if (!_currentUserId) return;
+  try {
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({
+      userId: _currentUserId, weights: _weightCache, macros: _macroCache, savedAt: new Date().toISOString(),
+    }));
+  } catch (e) { /* storage full — cache is best-effort */ }
+}
+
+function renderFromDataCache(user) {
+  try {
+    const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || 'null');
+    if (!c || c.userId !== user.id || !Array.isArray(c.weights)) return false;
+    _weightCache = c.weights;
+    _macroCache  = Array.isArray(c.macros) ? c.macros : [];
+    renderWeightView();
+    renderMacrosView();
+    renderLogView().catch(() => {});
+    console.log(`[cache] Painted ${_weightCache.length} weights + ${_macroCache.length} macros from local cache (saved ${c.savedAt})`);
+    return true;
+  } catch (e) { return false; }
+}
 
 function copySetupSQL() {
   const sql = document.getElementById('setupSQL').textContent;
@@ -1703,7 +1734,7 @@ async function syncGoalsToSupabase(goals) {
 
 // ── Supabase REST helper (no WebSocket — plain HTTP fetch) ─────────────────
 async function sbFetch(table, opts = {}) {
-  const { method = 'GET', select = '*', filters = {}, order, limit, body } = opts;
+  const { method = 'GET', select = '*', filters = {}, order, limit, body, params: extraParams, prefer } = opts;
   let url = `${SUPABASE_URL}/rest/v1/${table}`;
   const params = new URLSearchParams();
   params.set('select', select);
@@ -1712,6 +1743,7 @@ async function sbFetch(table, opts = {}) {
   }
   if (order) params.set('order', `${order.col}.${order.ascending !== false ? 'asc' : 'desc'}`);
   if (limit) params.set('limit', limit);
+  for (const [k, v] of Object.entries(extraParams || {})) params.set(k, v);
   const qs = params.toString();
   if (qs) url += '?' + qs;
 
@@ -1720,7 +1752,8 @@ async function sbFetch(table, opts = {}) {
     'Authorization': `Bearer ${_sbJwt || SUPABASE_ANON_KEY}`,
     'Content-Type': 'application/json',
   };
-  if (method === 'POST' || method === 'PATCH') headers['Prefer'] = 'return=representation';
+  if (prefer) headers['Prefer'] = prefer;
+  else if (method === 'POST' || method === 'PATCH') headers['Prefer'] = 'return=representation';
 
   const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const text = await res.text();
@@ -1769,13 +1802,17 @@ async function insertMacroEntry(entry) {
   };
   const rows = await sbOp(() => sbFetch('macro_entries', { method: 'POST', body: row }));
   const data = Array.isArray(rows) ? rows[0] : rows;
+  _writeGen++;
   _macroCache.push(dbMacroToApp(data));
+  saveDataCache();
   return data;
 }
 
 async function deleteMacroById(id) {
   await sbOp(() => sbFetch('macro_entries', { method: 'DELETE', filters: { id: { op: 'eq', val: id } } }));
+  _writeGen++;
   _macroCache = _macroCache.filter(e => e.id !== id);
+  saveDataCache();
 }
 
 // Convert DB row → app format (uses 'description' and 'time' internally)
@@ -1800,25 +1837,34 @@ function dbWeightToApp(row) {
 // ── Supabase Weight Operations ────────────────────────────────────────────
 
 async function upsertWeightEntry(date, weight) {
-  // Check if exists in cache
+  // True DB upsert arbitrated by the unique (user_id, date) index — a same-date
+  // log always UPDATEs server-side, even when the local cache missed the row.
+  // (The old cache-decides-insert-or-update path created duplicate date rows.)
+  const rows = await sbOp(() => sbFetch('weight_entries', {
+    method: 'POST',
+    params: { on_conflict: 'user_id,date' },
+    prefer: 'resolution=merge-duplicates,return=representation',
+    body: { date, weight, user_id: _currentUserId },
+  }));
+  const data = Array.isArray(rows) ? rows[0] : rows;
+  _writeGen++;
   const existing = _weightCache.find(e => e.date === date);
   if (existing) {
-    const rows = await sbOp(() => sbFetch('weight_entries', { method: 'PATCH', filters: { id: { op: 'eq', val: existing.id } }, body: { weight } }));
-    const data = Array.isArray(rows) ? rows[0] : rows;
     existing.weight = weight;
-    return data;
+    if (data?.id != null) existing.id = data.id;
   } else {
-    const rows = await sbOp(() => sbFetch('weight_entries', { method: 'POST', body: { date, weight, user_id: _currentUserId } }));
-    const data = Array.isArray(rows) ? rows[0] : rows;
     _weightCache.push(dbWeightToApp(data));
     _weightCache.sort((a,b) => a.date.localeCompare(b.date));
-    return data;
   }
+  saveDataCache();
+  return data;
 }
 
 async function deleteWeightById(id) {
   await sbOp(() => sbFetch('weight_entries', { method: 'DELETE', filters: { id: { op: 'eq', val: id } } }));
+  _writeGen++;
   _weightCache = _weightCache.filter(e => e.id !== id);
+  saveDataCache();
 }
 
 // getEntries returns in-memory weight cache (sync)
@@ -3180,13 +3226,30 @@ function hideLoadingState() {
   if (el) el.style.display = 'none';
 }
 
+// getSession() can stall for minutes (auth lock / token refresh over a dead
+// connection — classic on iOS PWA resume). Race it against a short timer and
+// fall back to the raw stored session so startup is never blocked; supabase-js
+// finishes in the background and onAuthStateChange/TOKEN_REFRESHED reconcile.
+async function getSessionFast(ms = 4000) {
+  const real = db.auth.getSession()
+    .then(r => r.data.session)
+    .catch(e => { console.warn('[auth] getSession error:', e.message); return null; });
+  const winner = await Promise.race([real, new Promise(res => setTimeout(() => res('__STALLED__'), ms))]);
+  if (winner !== '__STALLED__') return winner;
+  console.warn(`[auth] getSession stalled >${ms}ms — using stored session; auth catches up in background`);
+  try {
+    const s = JSON.parse(localStorage.getItem('sb-physiq-session') || 'null');
+    return (s?.access_token && s?.user) ? s : null;
+  } catch { return null; }
+}
+
 async function initSupabase() {
   // Show loading state immediately — prevents blank/auth flash during session restore
   showLoadingState();
 
   // Check session FIRST before setting up listener — avoids race condition
   console.log('[auth] Checking for existing session...');
-  const { data: { session } } = await db.auth.getSession();
+  const session = await getSessionFast();
 
   if (session?.user) {
     // Session found — go straight to app
@@ -3221,6 +3284,11 @@ async function initSupabase() {
       // Keep _sbJwt current so REST calls always use a valid token
       _sbJwt = session.access_token;
       console.log('[auth] Token refreshed, _sbJwt updated');
+      // If startup ran on a stale stored token (getSessionFast fallback), the
+      // initial loads may have 401'd — finish the job now that the JWT is fresh.
+      if (!_dbReady && _currentUserId && session.user) {
+        loadAppData(session.user);
+      }
     } else if (event === 'SIGNED_OUT') {
       // Explicit logout
       console.log('[auth] SIGNED_OUT, showing login screen');
@@ -3233,6 +3301,7 @@ async function initSupabase() {
       _dbReady = false;
       _weightCache = [];
       _macroCache  = [];
+      localStorage.removeItem(DATA_CACHE_KEY); // don't leave this user's data for the next login
       // reset gym beta state + hide its tab
       gymState.loaded = false; gymState.exercises = []; gymState.sets = []; gymState.cardio = [];
       const gbtn = document.getElementById('navGymBtn'); if (gbtn) gbtn.style.display = 'none';
@@ -3302,27 +3371,32 @@ function refreshAppSession() {
 }
 
 async function loadAppData(user) {
-  try {
-    // Test if tables exist at all
-    let testErr = null;
-    try { await sbFetch('weight_entries', { select: 'id', limit: 1 }); }
-    catch(e) { testErr = e; }
-    if (testErr && testErr.message?.includes('PGRST205')) {
-      document.getElementById('setupOverlay').style.display = 'block';
-      return;
-    }
+  // Paint instantly from the last known-good local copy — the user sees their
+  // data in milliseconds; the network below only reconciles it.
+  const painted = renderFromDataCache(user);
+  if (painted) document.getElementById('headerSub').textContent = '⟳ syncing…';
 
-    // DB migration (user_id column + RLS) is already complete — no check needed.
+  try {
+    // Fresh data — parallel, with timeout+retry (sbOp). The old path was
+    // sequential with unbounded waits: one stalled request = minutes of blank
+    // screen. Now a dead connection costs 8s before a fresh attempt replaces it.
+    const genAtStart = _writeGen;
+    const [wData, mData] = await Promise.all([
+      sbOp(() => sbFetch('weight_entries', { order: { col: 'date', ascending: true } })),
+      sbOp(() => sbFetch('macro_entries',  { order: { col: 'date', ascending: true } })),
+    ]);
 
     _dbReady = true;
 
-    // Load all weights for this user (RLS filters by user_id automatically)
-    const wData = await sbFetch('weight_entries', { order: { col: 'date', ascending: true } });
-    _weightCache = (wData || []).map(dbWeightToApp);
-
-    // Load all macros for this user
-    const mData = await sbFetch('macro_entries', { order: { col: 'date', ascending: true } });
-    _macroCache = (mData || []).map(dbMacroToApp);
+    // Apply — unless a write landed while the fetch was in flight (the response
+    // is a pre-write snapshot; applying it would roll the write back on screen).
+    if (_writeGen === genAtStart) {
+      _weightCache = (wData || []).map(dbWeightToApp);
+      _macroCache  = (mData || []).map(dbMacroToApp);
+      saveDataCache();
+    } else {
+      console.log('[supabase] Refresh raced a write — kept local state; next sync reconciles');
+    }
 
     console.log(`[supabase] Loaded ${_weightCache.length} weights + ${_macroCache.length} macros for user ${user.id}`);
 
@@ -3348,8 +3422,15 @@ async function loadAppData(user) {
     setupGymTab().catch(e => console.warn('[gym] setup error:', e));
 
   } catch(e) {
+    // Table-missing (fresh Supabase project) → setup overlay, same as the old probe
+    if (/PGRST205|Could not find the table/i.test(e.message || '')) {
+      document.getElementById('setupOverlay').style.display = 'block';
+      return;
+    }
     console.error('[supabase] Init error:', e);
-    document.getElementById('headerSub').textContent = '⚠️ Sync error';
+    document.getElementById('headerSub').textContent = painted
+      ? '⚠️ offline — showing last synced data'
+      : '⚠️ Sync error';
   }
 }
 
@@ -3363,10 +3444,18 @@ async function refreshFromSupabase() {
   if (now - _lastSyncMs < 2 * 60 * 1000) return; // skip if synced < 2 min ago
   _lastSyncMs = now;
   try {
-    const wData = await sbFetch('weight_entries', { order: { col: 'date', ascending: true } });
-    const mData = await sbFetch('macro_entries', { order: { col: 'date', ascending: true } });
+    const genAtStart = _writeGen;
+    const [wData, mData] = await Promise.all([
+      sbOp(() => sbFetch('weight_entries', { order: { col: 'date', ascending: true } })),
+      sbOp(() => sbFetch('macro_entries',  { order: { col: 'date', ascending: true } })),
+    ]);
+    if (_writeGen !== genAtStart) {
+      console.log('[supabase] Refresh raced a write — kept local state; next sync reconciles');
+      return;
+    }
     if (wData) _weightCache = wData.map(dbWeightToApp);
     if (mData) _macroCache  = mData.map(dbMacroToApp);
+    saveDataCache();
     renderWeightView();
     renderMacrosView();
   } catch(e) {

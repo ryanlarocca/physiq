@@ -1,6 +1,6 @@
 // Physiq — Service Worker with cache versioning (Safari PWA fix)
 // Version string for cache busting
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `physiq-${CACHE_VERSION}`;
 
 // Relative paths so precache works under BOTH /physiq/ (GitHub Pages) and the
@@ -52,16 +52,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // HTML: network-first — always fetch latest code, fall back to cache only if offline
+  // HTML: network-first with a 3.5s cutoff — always try fresh code, but a
+  // stalled request (dead connection on PWA resume) serves the cached copy
+  // instead of blanking the screen until the OS times out. The network fetch
+  // keeps running in the background to update the cache for next open.
   if (request.destination === 'document' || url.pathname.endsWith('.html')) {
-    event.respondWith(
-      fetch(request).then(response => {
+    event.respondWith((async () => {
+      const network = fetch(request).then(response => {
         if (response.status === 200) {
           caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
         }
         return response;
-      }).catch(() => caches.match(request))
-    );
+      });
+      const cached = await caches.match(request);
+      if (!cached) return network.catch(() => caches.match(request)); // first visit: nothing to fall back to
+      const winner = await Promise.race([
+        network.catch(() => null),
+        new Promise(res => setTimeout(() => res(null), 3500)),
+      ]);
+      return winner || cached;
+    })());
     return;
   }
 
