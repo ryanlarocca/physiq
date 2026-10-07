@@ -3305,6 +3305,7 @@ async function initSupabase() {
       // reset gym beta state + hide its tab
       gymState.loaded = false; gymState.exercises = []; gymState.sets = []; gymState.cardio = [];
       const gbtn = document.getElementById('navGymBtn'); if (gbtn) gbtn.style.display = 'none';
+      _gymRevealed = false;
     }
   });
 
@@ -3370,11 +3371,28 @@ function refreshAppSession() {
   window.location.reload(true);
 }
 
+// Reveal + preload the Gym tab once per login. setupGymTab lives in a later
+// <script> block, so on a synchronous startup (session already in storage) the
+// first call can land before that block is parsed — typeof guards it and the
+// post-fetch call retries. Never throws into loadAppData.
+let _gymRevealed = false;
+function revealGymTab() {
+  if (_gymRevealed || typeof setupGymTab !== 'function') return;
+  _gymRevealed = true;
+  setupGymTab().catch(e => console.warn('[gym] setup error:', e));
+}
+
 async function loadAppData(user) {
   // Paint instantly from the last known-good local copy — the user sees their
   // data in milliseconds; the network below only reconciles it.
   const painted = renderFromDataCache(user);
   if (painted) document.getElementById('headerSub').textContent = '⟳ syncing…';
+
+  // Gym Tracker (beta): reveal the tab for allowlisted users right away —
+  // it only depends on the user id, not on the network. Before 2026-10-07 this
+  // ran only after the live fetch succeeded, so a paused/slow Supabase meant no
+  // Gym tab at all (even though weight/macro views painted from cache).
+  revealGymTab();
 
   try {
     // Fresh data — parallel, with timeout+retry (sbOp). The old path was
@@ -3417,9 +3435,7 @@ async function loadAppData(user) {
     renderLogView().catch(() => {});
     // Load quick-add presets
     loadQuickAddPresets().catch(e => console.warn('[presets] Load error:', e));
-
-    // Gym Tracker (beta): reveal + preload only for allowlisted users
-    setupGymTab().catch(e => console.warn('[gym] setup error:', e));
+    revealGymTab();
 
   } catch(e) {
     // Table-missing (fresh Supabase project) → setup overlay, same as the old probe
@@ -3428,6 +3444,7 @@ async function loadAppData(user) {
       return;
     }
     console.error('[supabase] Init error:', e);
+    revealGymTab();
     document.getElementById('headerSub').textContent = painted
       ? '⚠️ offline — showing last synced data'
       : '⚠️ Sync error';
